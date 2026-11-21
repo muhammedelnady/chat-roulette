@@ -7,6 +7,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { zustandMMKVStorage } from "@/src/infrastructure/storage/ZustandMMKVAdapter";
 
+import { devtoolsConfig } from "./utils/devtools";
 import { readPersistedField } from "./utils/persistedState";
 
 const DIR_KEY = "chat_roulette_direction_preference";
@@ -43,10 +44,7 @@ export const useDirectionStore = create<DirectionState>()(
         setDirection: async (dir) => {
           set({ direction: dir }, false, "setDirection");
           I18nManager.allowRTL(true);
-          try {
-            const stateToPersist = JSON.stringify({ state: { direction: dir }, version: 0 });
-            await zustandMMKVStorage.setItem(DIR_KEY + "_v1", stateToPersist);
-          } catch {}
+          await Promise.resolve();
         },
 
         toggleDirection: () => {
@@ -68,6 +66,6 @@ export const useDirectionStore = create<DirectionState>()(
         },
       }
     ),
-    { name: "DirectionStore" }
+    devtoolsConfig("DirectionStore")
   )
 );

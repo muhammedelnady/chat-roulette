@@ -3,6 +3,7 @@
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
 
+import { ensureStorageInitialized } from "@/src/di/bootstrap";
 import { log } from "@/src/infrastructure/logging/logger";
 import { useAppFonts } from "@presentation/hooks/useAppFonts";
 import { useDirectionStore } from "@stores/useDirectionStore";
@@ -24,9 +25,11 @@ export function useAppInitialization() {
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
-    Promise.all([loadTheme(), loadDirection(), loadLanguage()]).catch((error: unknown) => {
-      log.error("Initialization failed:", error);
-    });
+    void ensureStorageInitialized()
+      .then(() => Promise.all([loadTheme(), loadDirection(), loadLanguage()]))
+      .catch((error: unknown) => {
+        log.error("Initialization failed:", error);
+      });
   }, [loadTheme, loadDirection, loadLanguage]);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export function useAppInitialization() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsForceReady(true);
-    }, 1500);
+    }, 2500);
     return () => clearTimeout(timer);
   }, []);
 

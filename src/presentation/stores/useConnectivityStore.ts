@@ -5,6 +5,8 @@ import type { NetInfoState } from "@react-native-community/netinfo";
 import NetInfo, { NetInfoStateType } from "@react-native-community/netinfo";
 import { create } from "zustand";
 
+import { devtoolsConfig } from "./utils/devtools";
+
 export interface ConnectivityState {
   isConnected: boolean;
   isInternetReachable: boolean | null;
@@ -41,13 +43,24 @@ export const useConnectivityStore = create<ConnectivityState>()(
 
       setDemoOfflineOverride: (offline: boolean) => {
         set({ demoOfflineOverride: offline }, false, "setDemoOfflineOverride");
+        if (!offline) {
+          void NetInfo.fetch()
+            .then((state) => {
+              if (!get().demoOfflineOverride) {
+                get().updateConnectivity(state);
+              }
+            })
+            .catch(() => {});
+        }
       },
 
       subscribe: () => {
-        void NetInfo.fetch().then((state) => {
-          if (get().demoOfflineOverride) return;
-          get().updateConnectivity(state);
-        });
+        void NetInfo.fetch()
+          .then((state) => {
+            if (get().demoOfflineOverride) return;
+            get().updateConnectivity(state);
+          })
+          .catch(() => {});
 
         const unsubscribe = NetInfo.addEventListener((state) => {
           if (get().demoOfflineOverride) return;
@@ -57,7 +70,7 @@ export const useConnectivityStore = create<ConnectivityState>()(
         return unsubscribe;
       },
     }),
-    { name: "ConnectivityStore" }
+    devtoolsConfig("ConnectivityStore")
   )
 );
 

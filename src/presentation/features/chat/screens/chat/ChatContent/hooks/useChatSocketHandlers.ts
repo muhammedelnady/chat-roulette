@@ -1,5 +1,7 @@
 /** @format */
 
+import { AppState } from "react-native";
+
 import type {
   IChatSocketService,
   QueueStatusPayload,
@@ -7,7 +9,7 @@ import type {
 } from "@/src/domain/services";
 import type { ChatState } from "@/src/presentation/stores/useChatStore.types";
 
-import type { ChatMessageEntity } from "../../../../shared/types";
+import { isRecord, parseIncomingMessage } from "../../../../shared/utils/messageParser";
 
 type StoreActions = Pick<
   ChatState,
@@ -21,101 +23,161 @@ type StoreActions = Pick<
   | "setSupportPresence"
 >;
 
+const TYPING_EXPIRY_MS = 6000;
+
 export function bindChatSocketEvents(
   conversationId: string,
   socket: IChatSocketService,
   actions: StoreActions,
   onReconnect: () => void
 ): () => void {
+  let typingExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearTypingExpiry = () => {
+    if (typingExpiryTimer) {
+      clearTimeout(typingExpiryTimer);
+      typingExpiryTimer = null;
+    }
+  };
+
   const handleNewMessage = (payload: unknown) => {
-    const data = payload as
-      { message?: ChatMessageEntity; conversationId?: string } | ChatMessageEntity;
-    const msg = "message" in data && data.message ? data.message : (data as ChatMessageEntity);
+    if (!isRecord(payload)) return;
+    const rawMsg = isRecord(payload["message"]) ? payload["message"] : payload;
     const convId =
-      "conversationId" in data && data.conversationId ? data.conversationId : msg.conversationId;
-    if (convId === conversationId && msg.id) {
-      actions.upsertMessage(conversationId, msg);
-      if (msg.senderType !== "USER") {
-        socket.markMessageRead(conversationId, msg.id);
-      }
+      typeof payload["conversationId"] === "string"
+        ? payload["conversationId"]
+        : typeof rawMsg["conversationId"] === "string"
+          ? rawMsg["conversationId"]
+          : undefined;
+    if (convId !== conversationId) return;
+
+    const msg = parseIncomingMessage({ ...rawMsg, conversationId: convId });
+    if (!msg) return;
+
+    actions.upsertMessage(conversationId, msg);
+    if (msg.senderType !== "USER" && AppState.currentState === "active") {
+      socket.markMessageRead(conversationId, msg.id);
     }
   };
 
   const handleMessageDelivered = (payload: unknown) => {
-    const data = payload as { clientId?: string };
-    if (data.clientId) {
-      actions.updateMessageStatus(conversationId, data.clientId, "DELIVERED");
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    if (typeof convId === "string" && convId !== conversationId) return;
+    const clientId = payload["clientId"];
+    if (typeof clientId === "string" && clientId.length > 0) {
+      actions.updateMessageStatus(conversationId, clientId, "DELIVERED");
+    }
+  };
+
+  const handleMessageFailed = (payload: unknown) => {
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    if (typeof convId === "string" && convId !== conversationId) return;
+    const clientId = payload["clientId"];
+    if (typeof clientId === "string" && clientId.length > 0) {
+      actions.updateMessageStatus(conversationId, clientId, "FAILED");
     }
   };
 
   const handleTypingUpdate = (payload: unknown) => {
-    const data = payload as { conversationId?: string; userIds?: string[] };
-    if (data.conversationId === conversationId && Array.isArray(data.userIds)) {
-      actions.setTypingUsers(conversationId, data.userIds);
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    const userIds = payload["userIds"];
+    if (convId === conversationId && Array.isArray(userIds)) {
+      const validIds = userIds.filter((id): id is string => typeof id === "string");
+      actions.setTypingUsers(conversationId, validIds);
+      clearTypingExpiry();
+      if (validIds.length > 0) {
+        typingExpiryTimer = setTimeout(() => {
+          actions.setTypingUsers(conversationId, []);
+        }, TYPING_EXPIRY_MS);
+      }
     }
   };
 
   const handleMessageRead = (payload: unknown) => {
-    const data = payload as {
-      conversationId?: string;
-      messageId?: string;
-      userId?: string;
-      readByUserId?: string;
-      readAt?: string;
-    };
-    const readUserId = data.readByUserId ?? data.userId;
-    if (data.conversationId === conversationId && data.messageId && readUserId) {
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    const messageId = payload["messageId"];
+    const readByUserId = payload["readByUserId"];
+    const userId = payload["userId"];
+    const readAt = payload["readAt"];
+    const readUserId =
+      typeof readByUserId === "string"
+        ? readByUserId
+        : typeof userId === "string"
+          ? userId
+          : undefined;
+    if (
+      convId === conversationId &&
+      typeof messageId === "string" &&
+      messageId.length > 0 &&
+      readUserId
+    ) {
       actions.markMessagesRead(
         conversationId,
-        data.messageId,
+        messageId,
         readUserId,
-        data.readAt ?? new Date().toISOString()
+        typeof readAt === "string" ? readAt : new Date().toISOString()
       );
     }
   };
 
   const handleAttachmentDeleted = (payload: unknown) => {
-    const data = payload as {
-      conversationId?: string;
-      messageId?: string;
-      attachmentId?: string;
-    };
-    if (data.conversationId === conversationId && data.messageId && data.attachmentId) {
-      actions.removeAttachment(conversationId, data.messageId, data.attachmentId);
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    const messageId = payload["messageId"];
+    const attachmentId = payload["attachmentId"];
+    if (
+      convId === conversationId &&
+      typeof messageId === "string" &&
+      typeof attachmentId === "string"
+    ) {
+      actions.removeAttachment(conversationId, messageId, attachmentId);
     }
   };
 
   const handleQueueStatus = (payload: unknown) => {
-    if (!payload || typeof payload !== "object") return;
-    const data = payload as QueueStatusPayload;
-    if (data.conversationId === conversationId) {
-      actions.setQueueStatus(conversationId, data);
+    if (!isRecord(payload)) return;
+    const convId = payload["conversationId"];
+    const queuePosition = payload["queuePosition"];
+    const estimatedWaitMinutes = payload["estimatedWaitMinutes"];
+    if (
+      convId === conversationId &&
+      typeof queuePosition === "number" &&
+      typeof estimatedWaitMinutes === "number"
+    ) {
+      actions.setQueueStatus(conversationId, payload as unknown as QueueStatusPayload);
     }
   };
 
   const handleQueueUpdated = (payload: unknown) => {
-    const data = payload as { count?: number };
-    if (typeof data.count === "number") {
-      actions.setOutboundQueueCount(data.count);
+    if (!isRecord(payload)) return;
+    const count = payload["count"];
+    if (typeof count === "number" && Number.isFinite(count)) {
+      actions.setOutboundQueueCount(count);
     }
   };
 
   const handleSupportPresence = (payload: unknown) => {
-    if (!payload || typeof payload !== "object") return;
-    const data = payload as Record<string, unknown>;
-    const rawCount = Number(data["onlineCount"] ?? data["onlineAgentCount"] ?? 0);
+    if (!isRecord(payload)) return;
+    const parsedCount = Number(payload["onlineCount"] ?? payload["onlineAgentCount"] ?? 0);
+    const rawCount = Number.isFinite(parsedCount) ? parsedCount : 0;
     actions.setSupportPresence({
       onlineCount: rawCount,
       onlineAgentCount: rawCount,
-      isSupportOnline: Boolean(data["isSupportOnline"] ?? rawCount > 0),
-      agents: Array.isArray(data["agents"])
-        ? (data["agents"] as SupportPresencePayload["agents"])
+      isSupportOnline: Boolean(payload["isSupportOnline"] ?? rawCount > 0),
+      agents: Array.isArray(payload["agents"])
+        ? (payload["agents"] as SupportPresencePayload["agents"])
         : [],
     });
   };
 
   socket.onEvent("message:new", handleNewMessage);
   socket.onEvent("message:delivered", handleMessageDelivered);
+  socket.onEvent("message:failed", handleMessageFailed);
+  socket.onEvent("error", handleMessageFailed);
   socket.onEvent("typing:update", handleTypingUpdate);
   socket.onEvent("message:read", handleMessageRead);
   socket.onEvent("attachment:deleted", handleAttachmentDeleted);
@@ -125,8 +187,11 @@ export function bindChatSocketEvents(
   socket.onEvent("reconnect", onReconnect);
 
   return () => {
+    clearTypingExpiry();
     socket.offEvent("message:new", handleNewMessage);
     socket.offEvent("message:delivered", handleMessageDelivered);
+    socket.offEvent("message:failed", handleMessageFailed);
+    socket.offEvent("error", handleMessageFailed);
     socket.offEvent("typing:update", handleTypingUpdate);
     socket.offEvent("message:read", handleMessageRead);
     socket.offEvent("attachment:deleted", handleAttachmentDeleted);

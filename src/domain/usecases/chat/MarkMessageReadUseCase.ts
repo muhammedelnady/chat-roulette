@@ -1,23 +1,24 @@
 /** @format */
 
-import { AppError } from "@/src/domain/errors";
+import { type AppError, ValidationError } from "@/src/domain/errors";
 import type { IMessageRepository } from "@/src/domain/repositories";
-import { err, isErr, ok, type Result } from "@/src/domain/Result";
+import { err, type Result } from "@/src/domain/Result";
+import { safeExecute } from "@/src/domain/usecases/safeExecute";
 
 export class MarkMessageReadUseCase {
-  constructor(private messageRepository: IMessageRepository) {}
+  constructor(private readonly messageRepository: IMessageRepository) {}
 
   async execute(conversationId: string, messageId: string): Promise<Result<void, AppError>> {
-    try {
-      const result = await this.messageRepository.markRead(conversationId, messageId);
-      if (isErr(result)) return err(result.error);
-      return ok(undefined);
-    } catch (error) {
-      return err(
-        new AppError("Failed to mark message read", "MESSAGE_READ_FAILED", {
-          originalError: error,
-        })
-      );
+    if (!conversationId.trim()) {
+      return err(new ValidationError("Conversation ID is required", "conversationId"));
     }
+    if (!messageId.trim()) {
+      return err(new ValidationError("Message ID is required", "messageId"));
+    }
+    return safeExecute(
+      () => this.messageRepository.markRead(conversationId, messageId),
+      "Failed to mark message read",
+      "MESSAGE_READ_FAILED"
+    );
   }
 }

@@ -5,12 +5,17 @@ import { memo, useCallback, useMemo } from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
-import { getHapticsService } from "@/src/di/registerHaptics";
 import { HapticFeedbackType } from "@/src/domain/services/HapticFeedbackType";
-import { useUI } from "@/src/presentation/hooks";
+import { useHaptics, useUI } from "@/src/presentation/hooks";
 import { borderRadius, spacing } from "@theme";
 import { COMPONENT_HEIGHTS, createButtonAccessibilityProps } from "@theme/style-utils";
-import type { ButtonSize, ButtonVariant, ColorTokens, TextVariant } from "@theme/types";
+import type {
+  ButtonSize,
+  ButtonVariant,
+  ColorTokens,
+  ShadowTokens,
+  TextVariant,
+} from "@theme/types";
 
 import { AnimatedPressable, type AnimatedPressableProps } from "./AnimatedPressable";
 import { Text } from "./Text";
@@ -41,6 +46,7 @@ interface StyleConfig {
   readonly disabled: boolean;
   readonly hasGradient: boolean;
   readonly colors: ColorTokens;
+  readonly shadows: ShadowTokens;
 }
 
 const getTextVariant = (size: ButtonSize): TextVariant => {
@@ -61,7 +67,7 @@ const getBackgroundColor = (
   colors: ColorTokens
 ): string => {
   if (hasGradient && !disabled) return "transparent";
-  if (disabled) return colors.background;
+  if (disabled) return colors.surfaceElevated;
 
   switch (variant) {
     case "primary":
@@ -89,26 +95,34 @@ const getTextColor = (variant: ButtonVariant, disabled: boolean, colors: ColorTo
 };
 
 const getBorderColor = (variant: ButtonVariant, disabled: boolean, colors: ColorTokens): string => {
+  if (disabled) return colors.border;
   if (variant === "outline") {
-    return disabled ? colors.border : colors.primary;
+    return colors.primary;
   }
   return "transparent";
 };
 
 const buildContainerStyle = (config: StyleConfig): ViewStyle => {
-  const { variant, size, disabled, hasGradient, colors } = config;
+  const { variant, size, disabled, hasGradient, colors, shadows } = config;
+  const elevatedShadow =
+    disabled || variant === "outline" || variant === "ghost"
+      ? shadows.none
+      : hasGradient
+        ? shadows.glowPrimary
+        : shadows.sm;
 
   return {
+    ...elevatedShadow,
     backgroundColor: getBackgroundColor(variant, disabled, hasGradient, colors),
     borderColor: getBorderColor(variant, disabled, colors),
-    borderWidth: variant === "outline" ? 1 : 0,
+    borderWidth: variant === "outline" || disabled ? 1 : 0,
     height: COMPONENT_HEIGHTS.button[size],
     borderRadius: borderRadius.full,
+    borderCurve: "continuous",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    opacity: disabled && variant !== "outline" ? 0.7 : 1,
-    overflow: "hidden",
+    opacity: disabled && variant !== "outline" ? 0.72 : 1,
   };
 };
 
@@ -132,7 +146,8 @@ export const Button = memo<ButtonProps>(
     testID = "button-touchable",
     ...props
   }) => {
-    const { colors } = useUI();
+    const { colors, shadows } = useUI();
+    const haptics = useHaptics();
     const hasGradient = Boolean(gradient) && !disabled;
 
     const containerStyles = useMemo(
@@ -143,8 +158,9 @@ export const Button = memo<ButtonProps>(
           disabled,
           hasGradient,
           colors,
+          shadows,
         }),
-      [variant, size, disabled, hasGradient, colors]
+      [variant, size, disabled, hasGradient, colors, shadows]
     );
 
     const resolvedTextColor = useMemo(
@@ -187,7 +203,7 @@ export const Button = memo<ButtonProps>(
         ) : (
           <View style={styles.innerContent}>
             {iconPosition === "start" && iconElement}
-            <Text variant={textVariant} weight="medium" color={resolvedTextColor} style={textStyle}>
+            <Text variant={textVariant} weight="bold" color={resolvedTextColor} style={textStyle}>
               {label}
             </Text>
             {iconPosition === "end" && iconElement}
@@ -196,9 +212,7 @@ export const Button = memo<ButtonProps>(
       </View>
     );
 
-    const onHaptic = useCallback(async () => {
-      await getHapticsService().light();
-    }, []);
+    const onHaptic = useCallback((type: HapticFeedbackType) => haptics.trigger(type), [haptics]);
 
     const pressableStyle = useMemo(
       () => [containerStyles, containerStyle, style],
@@ -217,18 +231,20 @@ export const Button = memo<ButtonProps>(
         accessibilityRole="button"
         testID={testID}
       >
-        {hasGradient ? (
-          <LinearGradient
-            colors={gradientColors}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.gradientFill}
-          >
-            {content}
-          </LinearGradient>
-        ) : (
-          content
-        )}
+        <View style={styles.clipContainer}>
+          {hasGradient ? (
+            <LinearGradient
+              colors={gradientColors}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.gradientFill}
+            >
+              {content}
+            </LinearGradient>
+          ) : (
+            content
+          )}
+        </View>
       </AnimatedPressable>
     );
   }
@@ -237,6 +253,16 @@ export const Button = memo<ButtonProps>(
 Button.displayName = "Button";
 
 const styles = StyleSheet.create({
+  clipContainer: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    borderRadius: borderRadius.full,
+    borderCurve: "continuous",
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   gradientFill: {
     flex: 1,
     width: "100%",
@@ -257,6 +283,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[16],
   },
   iconContainer: {
-    marginHorizontal: spacing[8],
+    marginHorizontal: spacing[6],
   },
 });

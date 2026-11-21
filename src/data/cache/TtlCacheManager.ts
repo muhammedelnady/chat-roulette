@@ -3,31 +3,48 @@
  * Data TTL Cache Manager
  */
 
-import { getStorageSync } from "@/src/data/cache/mmkvStorage";
-import {
-  CACHE_ENVELOPE_VERSION,
-  type CacheEnvelopeEntity,
-} from "@/src/domain/entities/CacheEnvelopeEntity";
 import type { IKeyValueStorage } from "@/src/domain/repositories/IKeyValueStorage";
+import { log } from "@/src/infrastructure/logging/logger";
+import { getStorageSync } from "@/src/infrastructure/storage/mmkvStorage";
+
+import { CACHE_ENVELOPE_VERSION, type CacheEnvelope } from "./CacheEnvelope";
+
+const CACHE_KEY_PREFIX = "ttl:";
+const MAX_CACHE_ENTRIES = 200;
+
+function prefixKey(key: string): string {
+  return key.startsWith(CACHE_KEY_PREFIX) ? key : `${CACHE_KEY_PREFIX}${key}`;
+}
+
+function isValidEnvelope(raw: unknown): raw is CacheEnvelope<unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const obj = raw as Record<string, unknown>;
+  return (
+    obj["version"] === CACHE_ENVELOPE_VERSION &&
+    typeof obj["cachedAt"] === "number" &&
+    Number.isFinite(obj["cachedAt"]) &&
+    typeof obj["ttlMs"] === "number" &&
+    Number.isFinite(obj["ttlMs"]) &&
+    "data" in obj
+  );
+}
 
 export class TtlCacheManager {
   constructor(private readonly storage: IKeyValueStorage = getStorageSync()) {}
 
-  getEnvelope<T>(key: string): CacheEnvelopeEntity<T> | null {
+  getEnvelope<T>(key: string): CacheEnvelope<T> | null {
+    const storageKey = prefixKey(key);
     try {
-      const raw = this.storage.getString(key);
+      const raw = this.storage.getString(storageKey);
       if (!raw) return null;
       const parsed: unknown = JSON.parse(raw);
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        !("version" in parsed) ||
-        (parsed as { version?: unknown }).version !== CACHE_ENVELOPE_VERSION
-      ) {
+      if (!isValidEnvelope(parsed)) {
+        this.storage.delete(storageKey);
         return null;
       }
-      return parsed as CacheEnvelopeEntity<T>;
+      return parsed as CacheEnvelope<T>;
     } catch {
+      this.storage.delete(storageKey);
       return null;
     }
   }
@@ -49,33 +66,60 @@ export class TtlCacheManager {
   }
 
   set<T>(key: string, data: T, ttlMs: number = 0, etag?: string): void {
+    const storageKey = prefixKey(key);
     try {
-      const envelope: CacheEnvelopeEntity<T> = {
+      this.enforceCapacity(storageKey);
+      const envelope: CacheEnvelope<T> = {
         version: CACHE_ENVELOPE_VERSION,
         cachedAt: Date.now(),
         ttlMs,
         data,
         ...(etag ? { etag } : {}),
       };
-      this.storage.setString(key, JSON.stringify(envelope));
-    } catch {}
+      this.storage.setString(storageKey, JSON.stringify(envelope));
+    } catch (error) {
+      log.warn(`[TtlCacheManager] Failed to persist cache key ${storageKey}:`, error);
+    }
   }
 
   delete(key: string): void {
     try {
-      this.storage.delete(key);
-    } catch {}
+      this.storage.delete(prefixKey(key));
+    } catch (error) {
+      log.warn(`[TtlCacheManager] Failed to delete cache key ${key}:`, error);
+    }
   }
 
   invalidatePrefix(prefix: string): number {
+    const fullPrefix = prefixKey(prefix);
     try {
-      const keys = this.storage.getAllKeys().filter((k) => k.startsWith(prefix));
+      const keys = this.storage.getAllKeys().filter((k) => k.startsWith(fullPrefix));
       for (const k of keys) {
         this.storage.delete(k);
       }
       return keys.length;
-    } catch {
+    } catch (error) {
+      log.warn(`[TtlCacheManager] Failed to invalidate prefix ${prefix}:`, error);
       return 0;
+    }
+  }
+
+  private enforceCapacity(incomingKey: string): void {
+    if (this.storage.contains(incomingKey)) return;
+    const cacheKeys = this.storage.getAllKeys().filter((k) => k.startsWith(CACHE_KEY_PREFIX));
+    if (cacheKeys.length < MAX_CACHE_ENTRIES) return;
+    let oldestKey = cacheKeys[0];
+    let oldestTs = Infinity;
+    for (const k of cacheKeys) {
+      const env = this.getEnvelope(k);
+      const ts = env?.cachedAt ?? 0;
+      if (ts < oldestTs) {
+        oldestTs = ts;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) {
+      this.storage.delete(oldestKey);
     }
   }
 }

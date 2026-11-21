@@ -1,7 +1,7 @@
 /** @format */
 
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 import { useUseCases } from "@/src/di/UseCasesProvider";
@@ -18,13 +18,14 @@ import {
 
 import { useChatNavigation } from "../../../shared/hooks";
 import type { ChatRoomCategory } from "../../../shared/types";
+import { isRecord, parseIncomingMessage } from "../../../shared/utils/messageParser";
 
 import type { ChatRoomsViewModel } from "./ChatRoomsContent.types";
 
 export function useChatRoomsViewModel(): ChatRoomsViewModel {
   const { getGetConversationsUseCase, getChatSocketService } = useUseCases();
   const { navigateToChat, navigateToRoulette } = useChatNavigation();
-  const { isDark, toggleTheme, isRTL } = useUI();
+  const { isDark, toggleTheme, isRTL, t } = useUI();
   const isOnline = useIsOnline();
   const demoOfflineOverride = useConnectivityStore((s) => s.demoOfflineOverride);
   const setDemoOfflineOverride = useConnectivityStore((s) => s.setDemoOfflineOverride);
@@ -37,6 +38,7 @@ export function useChatRoomsViewModel(): ChatRoomsViewModel {
     setConversations,
     setIsLoadingConversations,
     setOutboundQueueCount,
+    upsertMessage,
   } = useChatStore(
     useShallow((state) => ({
       isLoadingConversations: state.isLoadingConversations,
@@ -44,45 +46,105 @@ export function useChatRoomsViewModel(): ChatRoomsViewModel {
       setConversations: state.setConversations,
       setIsLoadingConversations: state.setIsLoadingConversations,
       setOutboundQueueCount: state.setOutboundQueueCount,
+      upsertMessage: state.upsertMessage,
     }))
   );
 
   const [selectedCategory, setSelectedCategory] = useState<ChatRoomCategory>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isMountedRef = useRef(true);
+  const hasLoadedRef = useRef(false);
+  const refreshRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      refreshRequestIdRef.current += 1;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
-    setIsLoadingConversations(true);
-    const result = await getGetConversationsUseCase.execute();
-    if (isErr(result)) {
-      log.error("Failed to fetch rooms:", result.error);
+    const requestId = ++refreshRequestIdRef.current;
+    const isInitialLoad = !hasLoadedRef.current;
+    setError(null);
+    if (isInitialLoad) {
+      setIsLoadingConversations(true);
     } else {
-      setConversations(result.value.data);
+      setIsRefreshing(true);
     }
-    setOutboundQueueCount(getChatSocketService.getPendingQueueCount?.() ?? 0);
-    setIsLoadingConversations(false);
+
+    try {
+      const result = await getGetConversationsUseCase.execute();
+      if (!isMountedRef.current || requestId !== refreshRequestIdRef.current) return;
+
+      if (isErr(result)) {
+        log.error("Failed to fetch rooms:", result.error);
+        setError(t("rooms.loadFailed"));
+      } else {
+        setConversations(result.value.data);
+        hasLoadedRef.current = true;
+      }
+      setOutboundQueueCount(getChatSocketService.getPendingQueueCount?.() ?? 0);
+    } catch (err: unknown) {
+      if (!isMountedRef.current || requestId !== refreshRequestIdRef.current) return;
+      log.error("Unexpected rooms fetch failure:", err);
+      setError(t("rooms.loadFailed"));
+    } finally {
+      if (isMountedRef.current && requestId === refreshRequestIdRef.current) {
+        setIsLoadingConversations(false);
+        setIsRefreshing(false);
+      }
+    }
   }, [
     getChatSocketService,
     getGetConversationsUseCase,
     setConversations,
     setIsLoadingConversations,
     setOutboundQueueCount,
+    t,
   ]);
 
   useEffect(() => {
-    if (!getChatSocketService.isConnected()) {
-      void getChatSocketService.connect();
+    if (isOnline && !getChatSocketService.isConnected()) {
+      void Promise.resolve(getChatSocketService.connect()).catch((err: unknown) => {
+        log.warn("Rooms socket connect failed:", err);
+      });
     }
+  }, [getChatSocketService, isOnline]);
+
+  useEffect(() => {
     const handleQueueUpdated = (payload: unknown) => {
-      const data = payload as { count?: number };
-      if (typeof data.count === "number") {
-        setOutboundQueueCount(data.count);
+      if (!isRecord(payload)) return;
+      const count = payload["count"];
+      if (typeof count === "number") {
+        setOutboundQueueCount(count);
       }
     };
+    const handleReconnect = () => {
+      void refresh();
+    };
+    const handleNewMessage = (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const parsed = parseIncomingMessage(payload);
+      if (parsed) {
+        upsertMessage(parsed.conversationId, parsed);
+      }
+    };
+
     getChatSocketService.onEvent("queue:updated", handleQueueUpdated);
+    getChatSocketService.onEvent("reconnect", handleReconnect);
+    getChatSocketService.onEvent("message:new", handleNewMessage);
+
     return () => {
       getChatSocketService.offEvent("queue:updated", handleQueueUpdated);
+      getChatSocketService.offEvent("reconnect", handleReconnect);
+      getChatSocketService.offEvent("message:new", handleNewMessage);
     };
-  }, [getChatSocketService, setOutboundQueueCount]);
+  }, [getChatSocketService, refresh, setOutboundQueueCount, upsertMessage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,9 +163,21 @@ export function useChatRoomsViewModel(): ChatRoomsViewModel {
         const subjectMatch = (room.subject ?? "").toLowerCase().includes(query);
         const topicMatch = (room.topic ?? "").toLowerCase().includes(query);
         const lastMsgMatch = (room.lastMessage?.content ?? "").toLowerCase().includes(query);
-        return subjectMatch || topicMatch || lastMsgMatch;
+        const participantMatch = (room.participants[0]?.user?.fullName ?? "")
+          .toLowerCase()
+          .includes(query);
+        const partnerRoleMatch = (room.partnerRole ?? "").toLowerCase().includes(query);
+        const icebreakerMatch = (room.icebreaker ?? "").toLowerCase().includes(query);
+        return (
+          subjectMatch ||
+          topicMatch ||
+          lastMsgMatch ||
+          participantMatch ||
+          partnerRoleMatch ||
+          icebreakerMatch
+        );
       })
-      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+      .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   }, [conversations, searchQuery, selectedCategory]);
 
   const totalOnlineMembers = useMemo(
@@ -120,6 +194,8 @@ export function useChatRoomsViewModel(): ChatRoomsViewModel {
     selectedCategory,
     searchQuery,
     isLoading: isLoadingConversations,
+    isRefreshing,
+    error,
     isOnline,
     isDark,
     isRTL,

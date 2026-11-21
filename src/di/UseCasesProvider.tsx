@@ -3,7 +3,7 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 import { container } from "@/src/di/container";
-import type { IChatSocketService } from "@/src/domain/services";
+import type { IChatSocketService, IHapticsService } from "@/src/domain/services";
 import type {
   CancelVoiceRecordingUseCase,
   StartVoiceRecordingUseCase,
@@ -25,6 +25,7 @@ import type {
 } from "@/src/domain/usecases/chat";
 
 export interface UseCasesContextValue {
+  readonly getHapticsService: IHapticsService;
   readonly getChatSocketService: IChatSocketService;
   readonly getGetConversationsUseCase: GetConversationsUseCase;
   readonly getGetConversationByIdUseCase: GetConversationByIdUseCase;
@@ -52,6 +53,7 @@ export interface UseCasesProviderProps {
 export function UseCasesProvider({ children }: UseCasesProviderProps) {
   const value = useMemo<UseCasesContextValue>(
     () => ({
+      getHapticsService: container.getHapticsService(),
       getChatSocketService: container.getChatSocketService(),
       getGetConversationsUseCase: container.getGetConversationsUseCase(),
       getGetConversationByIdUseCase: container.getGetConversationByIdUseCase(),
@@ -81,4 +83,8 @@ export function useUseCases(): UseCasesContextValue {
     throw new Error("useUseCases must be used within UseCasesProvider");
   }
   return ctx;
+}
+
+export function useOptionalUseCases(): UseCasesContextValue | null {
+  return useContext(UseCasesContext);
 }

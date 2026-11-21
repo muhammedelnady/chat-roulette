@@ -1,5 +1,18 @@
 /** @format */
 
+function hasValidEntityId(obj: Record<string, unknown>): boolean {
+  const id = obj["id"];
+  const altId = obj["_id"];
+  if (typeof id === "string" && id.trim().length > 0) return true;
+  if (typeof altId === "string" && altId.trim().length > 0) {
+    if (id === undefined) {
+      obj["id"] = altId;
+    }
+    return true;
+  }
+  return false;
+}
+
 export function extractEnvelopeEntity<T extends object>(
   raw: unknown,
   preferredKeys: string[] = []
@@ -14,7 +27,7 @@ export function extractEnvelopeEntity<T extends object>(
     const val = record[key];
     if (val && typeof val === "object" && !Array.isArray(val)) {
       const nested = val as Record<string, unknown>;
-      if ("id" in nested || "_id" in nested) {
+      if (hasValidEntityId(nested)) {
         return nested as T;
       }
     }
@@ -25,17 +38,18 @@ export function extractEnvelopeEntity<T extends object>(
     for (const key of preferredKeys) {
       const innerVal = inner[key];
       if (innerVal && typeof innerVal === "object" && !Array.isArray(innerVal)) {
-        if ("id" in innerVal || "_id" in innerVal) {
-          return innerVal as T;
+        const innerRecord = innerVal as Record<string, unknown>;
+        if (hasValidEntityId(innerRecord)) {
+          return innerRecord as T;
         }
       }
     }
-    if ("id" in inner || "_id" in inner) {
+    if (hasValidEntityId(inner)) {
       return inner as T;
     }
   }
 
-  if ("id" in record || "_id" in record) {
+  if (hasValidEntityId(record)) {
     return record as T;
   }
 

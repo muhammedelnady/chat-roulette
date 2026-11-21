@@ -1,13 +1,23 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { memo, useCallback } from "react";
+import { ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { Button, Text } from "@/src/presentation/components/atoms";
+import { HapticFeedbackType } from "@/src/domain/services/HapticFeedbackType";
+import { AnimatedPressable, Button, PulseDot, Text } from "@/src/presentation/components/atoms";
 import { PageLayout } from "@/src/presentation/components/templates";
-import { useUI } from "@/src/presentation/hooks";
-import { gradients } from "@/src/presentation/theme";
+import { useHaptics, useScreenFocused, useUI } from "@/src/presentation/hooks";
+import {
+  CSS_EASE_OUT,
+  FADE_DOWN_ENTER,
+  FADE_DOWN_EXIT,
+  gradients,
+  MOTION_DURATION,
+  SOFT_POP_ENTER,
+  SOFT_POP_EXIT,
+} from "@/src/presentation/theme";
 
 import { MatchRevealCard, RadarPulse } from "../components";
 
@@ -16,26 +26,56 @@ import { styles } from "./ChatRouletteContent.styles";
 import type { ChatRouletteContentProps, ChatRouletteViewModel } from "./ChatRouletteContent.types";
 import { useChatRouletteViewModel } from "./ChatRouletteContent.viewmodel";
 
+const TOPIC_CHIP_TRANSITION = ["transform", "opacity", "backgroundColor", "borderColor"] as const;
+
 const ChatRouletteContentView = memo<{
   readonly viewModel: ChatRouletteViewModel;
   readonly testID?: string;
 }>(({ viewModel, testID = CHAT_ROULETTE_TEST_IDS.ROOT }) => {
-  const { colors, t, isRTL } = useUI();
+  const { colors, shadows, t, isRTL } = useUI();
+  const haptics = useHaptics();
+  const isScreenFocused = useScreenFocused();
+  const isMatched = Boolean(viewModel.matchedRoom);
+
+  const handleHaptics = useCallback((type: HapticFeedbackType) => haptics.trigger(type), [haptics]);
+
+  const selectedTopicConfig = ROULETTE_TOPICS.find(
+    (topic) => topic.value === viewModel.selectedTopic
+  );
+  const localizedTopicLabel = selectedTopicConfig
+    ? t(selectedTopicConfig.labelKey)
+    : viewModel.selectedTopic;
+
+  const telemetryLabel = isMatched
+    ? t("roulette.signalLocked", { topic: localizedTopicLabel })
+    : viewModel.isScanning
+      ? t("roulette.searchingTitle")
+      : t("roulette.signalReady", { topic: localizedTopicLabel });
 
   return (
     <PageLayout testID={testID}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={[styles.headerRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-          <Pressable
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerRow}>
+          <AnimatedPressable
             testID={CHAT_ROULETTE_TEST_IDS.BACK_BUTTON}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.back")}
+            scaleTo={0.95}
+            hitSlop={4}
+            hapticType={HapticFeedbackType.Light}
+            onHaptic={handleHaptics}
             onPress={viewModel.navigateBack}
-            style={({ pressed }) => [
+            style={[
               styles.backButton,
+              shadows.sm,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.borderStrong,
+                borderColor: colors.border,
               },
-              pressed && { opacity: 0.75 },
             ]}
           >
             <Ionicons
@@ -43,9 +83,9 @@ const ChatRouletteContentView = memo<{
               size={20}
               color={colors.textPrimary}
             />
-          </Pressable>
+          </AnimatedPressable>
           <View style={styles.headerTextGroup}>
-            <Text variant="xl" weight="bold" color={colors.textPrimary}>
+            <Text variant="xl" weight="bold" color={colors.textPrimary} style={styles.headerTitle}>
               {t("roulette.title")}
             </Text>
             <Text variant="xs" color={colors.textSecondary}>
@@ -54,28 +94,45 @@ const ChatRouletteContentView = memo<{
           </View>
         </View>
 
-        <Text variant="sm" weight="bold" color={colors.textPrimary} style={styles.sectionTitle}>
+        <Text variant="xs" weight="bold" color={colors.textSecondary} style={styles.sectionTitle}>
           {t("roulette.pickTopics")}
         </Text>
 
-        <View style={[styles.topicsWrap, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
+        <View style={styles.topicsWrap}>
           {ROULETTE_TOPICS.map((topic) => {
             const isSelected = viewModel.selectedTopic === topic.value;
             return (
-              <Pressable
+              <AnimatedPressable
                 key={topic.id}
                 testID={CHAT_ROULETTE_TEST_IDS.TOPIC_CHIP(topic.id)}
+                accessibilityRole="button"
+                accessibilityLabel={t(topic.labelKey)}
+                accessibilityState={{ selected: isSelected, disabled: viewModel.isScanning }}
                 disabled={viewModel.isScanning}
-                onPress={() => viewModel.setSelectedTopic(topic.value)}
-                style={({ pressed }) => [
+                hitSlop={4}
+                scaleTo={0.96}
+                transitionProperties={TOPIC_CHIP_TRANSITION}
+                transitionDurationMs={MOTION_DURATION.fast}
+                hapticType={HapticFeedbackType.Light}
+                onHaptic={handleHaptics}
+                onPress={() => {
+                  viewModel.setSelectedTopic(topic.value);
+                }}
+                style={[
                   styles.topicChip,
+                  isSelected ? shadows.sm : null,
+                  viewModel.isScanning ? styles.topicChipDisabled : null,
                   {
                     backgroundColor: isSelected ? colors.primary : colors.surface,
-                    borderColor: isSelected ? colors.accent : colors.borderStrong,
+                    borderColor: isSelected ? colors.accent : colors.border,
                   },
-                  pressed && { opacity: 0.8 },
                 ]}
               >
+                <Ionicons
+                  name={topic.icon}
+                  size={14}
+                  color={isSelected ? colors.textOnPrimary : colors.accent}
+                />
                 <Text
                   variant="xs"
                   weight="bold"
@@ -83,26 +140,80 @@ const ChatRouletteContentView = memo<{
                 >
                   {t(topic.labelKey)}
                 </Text>
-              </Pressable>
+              </AnimatedPressable>
             );
           })}
         </View>
 
-        <RadarPulse isScanning={viewModel.isScanning} isMatched={Boolean(viewModel.matchedRoom)} />
+        <Animated.View
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.telemetryPill,
+            {
+              backgroundColor: isMatched ? colors.successTint : colors.accentTint,
+              borderColor: isMatched ? colors.successBorder : colors.accentBorder,
+              transitionProperty: ["backgroundColor", "borderColor"],
+              transitionDuration: MOTION_DURATION.fast,
+              transitionTimingFunction: CSS_EASE_OUT,
+            },
+          ]}
+        >
+          <PulseDot
+            color={
+              isMatched ? colors.success : viewModel.isScanning ? colors.accent : colors.primary
+            }
+            size={7}
+            haloSize={11}
+            active={viewModel.isScanning && isScreenFocused}
+          />
+          <Text variant="xs" weight="bold" color={isMatched ? colors.success : colors.accent}>
+            {telemetryLabel}
+          </Text>
+        </Animated.View>
+
+        <RadarPulse
+          isScanning={viewModel.isScanning}
+          isMatched={isMatched}
+          isActive={isScreenFocused}
+        />
 
         {viewModel.isScanning ? (
-          <View style={styles.statusContainer}>
+          <Animated.View
+            entering={FADE_DOWN_ENTER}
+            exiting={FADE_DOWN_EXIT}
+            style={styles.statusContainer}
+          >
             <Text variant="md" weight="bold" color={colors.accent} centered>
               {t("roulette.searchingTitle")}
             </Text>
             <Text variant="xs" color={colors.textSecondary} centered>
               {t("roulette.searchingSubtitle")}
             </Text>
-          </View>
+          </Animated.View>
+        ) : null}
+
+        {viewModel.error && !viewModel.isScanning && !viewModel.matchedRoom ? (
+          <Animated.View
+            testID={CHAT_ROULETTE_TEST_IDS.ERROR_BANNER}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+            entering={FADE_DOWN_ENTER}
+            exiting={FADE_DOWN_EXIT}
+            style={[
+              styles.errorBanner,
+              { backgroundColor: colors.errorTint, borderColor: colors.errorBorder },
+            ]}
+          >
+            <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
+            <Text variant="xs" weight="medium" color={colors.error} style={styles.errorText}>
+              {viewModel.error}
+            </Text>
+          </Animated.View>
         ) : null}
 
         {viewModel.matchedRoom ? (
           <MatchRevealCard
+            key={viewModel.matchedRoom.id}
             match={viewModel.matchedRoom}
             onEnterRoom={viewModel.enterMatchedRoom}
             onSpinAgain={viewModel.startMatching}
@@ -110,20 +221,24 @@ const ChatRouletteContentView = memo<{
         ) : (
           <View style={styles.footerCta}>
             {viewModel.isScanning ? (
-              <Button
-                testID={CHAT_ROULETTE_TEST_IDS.CANCEL_BUTTON}
-                label={t("roulette.cancelSearch")}
-                variant="outline"
-                onPress={viewModel.cancelMatching}
-              />
+              <Animated.View key="cancel-cta" entering={SOFT_POP_ENTER} exiting={SOFT_POP_EXIT}>
+                <Button
+                  testID={CHAT_ROULETTE_TEST_IDS.CANCEL_BUTTON}
+                  label={t("roulette.cancelSearch")}
+                  variant="outline"
+                  onPress={viewModel.cancelMatching}
+                />
+              </Animated.View>
             ) : (
-              <Button
-                testID={CHAT_ROULETTE_TEST_IDS.START_BUTTON}
-                label={t("roulette.startMatching")}
-                gradient={gradients.primary}
-                icon={<Ionicons name="radio-outline" size={18} color={colors.textOnPrimary} />}
-                onPress={viewModel.startMatching}
-              />
+              <Animated.View key="start-cta" entering={SOFT_POP_ENTER} exiting={SOFT_POP_EXIT}>
+                <Button
+                  testID={CHAT_ROULETTE_TEST_IDS.START_BUTTON}
+                  label={viewModel.error ? t("common.retry") : t("roulette.startMatching")}
+                  gradient={gradients.primary}
+                  icon={<Ionicons name="radio-outline" size={18} color={colors.textOnPrimary} />}
+                  onPress={viewModel.startMatching}
+                />
+              </Animated.View>
             )}
           </View>
         )}

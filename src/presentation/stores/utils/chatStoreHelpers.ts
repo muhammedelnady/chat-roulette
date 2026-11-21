@@ -12,7 +12,29 @@ export function mergeInitialMessages(
       !incoming.some((nm) => nm.clientId === m.clientId || (nm.id && nm.id === m.id))
   );
   return [...incoming, ...pending].sort(
-    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
+    (a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0)
+  );
+}
+
+export function deduplicateMessages(
+  existing: readonly MessageEntity[],
+  incoming: readonly MessageEntity[]
+): MessageEntity[] {
+  const seenKeys = new Set<string>();
+  for (const m of existing) {
+    if (m.clientId) seenKeys.add(`c:${m.clientId}`);
+    if (m.id) seenKeys.add(`i:${m.id}`);
+  }
+  const uniqueIncoming = incoming.filter((m) => {
+    const hasClient = m.clientId && seenKeys.has(`c:${m.clientId}`);
+    const hasId = m.id && seenKeys.has(`i:${m.id}`);
+    if (hasClient || hasId) return false;
+    if (m.clientId) seenKeys.add(`c:${m.clientId}`);
+    if (m.id) seenKeys.add(`i:${m.id}`);
+    return true;
+  });
+  return [...existing, ...uniqueIncoming].sort(
+    (a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0)
   );
 }
 
@@ -32,7 +54,7 @@ export function upsertMessageInList(
     return { messages: updated, inserted: false };
   }
   const next = [...existing, message].sort(
-    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
+    (a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0)
   );
   return { messages: next, inserted: true };
 }
@@ -65,21 +87,22 @@ export function applyMessageReadInList(
 export function toggleReactionInList(
   existing: readonly MessageEntity[],
   messageId: string,
-  emoji: string
+  emoji: string,
+  actorId = "you"
 ): MessageEntity[] {
   return existing.map((m) => {
     if (m.id !== messageId && m.clientId !== messageId) return m;
     const nextReactions = { ...(m.reactions ?? {}) };
     const users = nextReactions[emoji] ? [...nextReactions[emoji]] : [];
-    if (users.includes("you")) {
-      const remaining = users.filter((u) => u !== "you");
+    if (users.includes(actorId)) {
+      const remaining = users.filter((u) => u !== actorId);
       if (remaining.length === 0) {
         delete nextReactions[emoji];
       } else {
         nextReactions[emoji] = remaining;
       }
     } else {
-      nextReactions[emoji] = [...users, "you"];
+      nextReactions[emoji] = [...users, actorId];
     }
     return { ...m, reactions: nextReactions };
   });

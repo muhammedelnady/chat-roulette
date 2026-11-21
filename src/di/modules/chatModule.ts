@@ -1,5 +1,6 @@
 /** @format */
 
+import { configureHttpAuth } from "@/src/data/api";
 import { ChatRepositoryImpl } from "@/src/data/repositories/ChatRepositoryImpl";
 import { MessageRepositoryImpl } from "@/src/data/repositories/MessageRepositoryImpl";
 import {
@@ -31,6 +32,7 @@ import { env, isSimulatedChatMode } from "@/src/infrastructure/system/env";
 import { connectivityModule } from "./connectivityModule";
 
 const tokenStorage = new TokenStorageImpl();
+configureHttpAuth(tokenStorage);
 
 const conversationRepository: IConversationRepository = isSimulatedChatMode
   ? new SimulatedChatRepository()

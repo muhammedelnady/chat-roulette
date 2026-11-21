@@ -1,12 +1,11 @@
 /** @format */
 
-import * as Crypto from "expo-crypto";
-
 import type { VoiceNote } from "@/src/domain/entities";
 import {
   AppError,
   AuthError,
   CacheError,
+  DomainError,
   ErrorCategory,
   NetworkError,
   NotFoundError,
@@ -19,7 +18,7 @@ import {
 } from "@/src/domain/errors";
 import { InMemoryEventBus, LanguageChangedEvent } from "@/src/domain/events";
 import type { IConversationRepository, IMessageRepository } from "@/src/domain/repositories";
-import { isErr, isOk, ok } from "@/src/domain/Result";
+import { err, isErr, isOk, ok } from "@/src/domain/Result";
 import type { IAudioRecordingService } from "@/src/domain/services";
 import {
   CancelVoiceRecordingUseCase,
@@ -43,12 +42,19 @@ import {
 import { generateUUID } from "@/src/domain/utils/uuid";
 
 describe("Domain Core", () => {
-  it("constructs domain and app errors with proper categories and metadata", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("constructs domain and app errors with proper inheritance, categories, and metadata", () => {
     const valErr = new ValidationError("Invalid field", "subject", { min: 3 });
+    expect(valErr).toBeInstanceOf(AppError);
+    expect(valErr).toBeInstanceOf(DomainError);
     expect(valErr.category).toBe(ErrorCategory.VALIDATION);
     expect(valErr.field).toBe("subject");
 
     const notFound = new NotFoundError("Conversation");
+    expect(notFound).toBeInstanceOf(AppError);
     expect(notFound.category).toBe(ErrorCategory.NOT_FOUND);
     expect(notFound.message).toBe("Conversation not found");
 
@@ -66,12 +72,14 @@ describe("Domain Core", () => {
     expect(serverErr.category).toBe(ErrorCategory.SERVER);
 
     const rateErr = new RateLimitError();
+    expect(rateErr).toBeInstanceOf(AppError);
     expect(rateErr.category).toBe(ErrorCategory.RATE_LIMIT);
 
     const authErr = new AuthError();
     expect(authErr.category).toBe(ErrorCategory.AUTH);
 
     const permErr = new PermissionError();
+    expect(permErr).toBeInstanceOf(AppError);
     expect(permErr.category).toBe(ErrorCategory.PERMISSION);
 
     const cacheErr = new CacheError();
@@ -81,7 +89,7 @@ describe("Domain Core", () => {
     expect(serialErr.category).toBe(ErrorCategory.SERIALIZATION);
   });
 
-  it("publishes, subscribes, handles errors, and clears InMemoryEventBus", async () => {
+  it("publishes, handles re-entrant unsubscribes, logs failures, and clears InMemoryEventBus", async () => {
     const warn = jest.fn();
     const bus = new InMemoryEventBus({
       silly: jest.fn(),
@@ -94,14 +102,22 @@ describe("Domain Core", () => {
     const received: Record<string, unknown>[] = [];
     const event = new LanguageChangedEvent("ar");
     expect(event.eventType).toBe("LanguageChangedEvent");
-    expect(event.toPayload()).toMatchObject({ language: "ar" });
+    expect(event.toPayload()).toMatchObject({
+      eventType: "LanguageChangedEvent",
+      language: "ar",
+    });
 
     await bus.publish(event);
     expect(bus.handlerCount("LanguageChangedEvent")).toBe(0);
 
+    let unsubSecond: (() => void) | undefined;
     const unsubscribe = bus.subscribe<LanguageChangedEvent>("LanguageChangedEvent", (e) => {
       received.push(e.toPayload());
+      unsubSecond?.();
     });
+    const secondSpy = jest.fn();
+    unsubSecond = bus.subscribe("LanguageChangedEvent", secondSpy);
+
     const unsubAsyncFail = bus.subscribe("LanguageChangedEvent", async () => {
       throw new Error("async failure");
     });
@@ -109,9 +125,11 @@ describe("Domain Core", () => {
       throw new Error("sync failure");
     });
 
-    expect(bus.handlerCount("LanguageChangedEvent")).toBe(3);
+    expect(bus.handlerCount("LanguageChangedEvent")).toBe(4);
     await bus.publishAll([event]);
     expect(received).toHaveLength(1);
+    expect(secondSpy).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(3);
 
     unsubscribe();
     unsubAsyncFail();
@@ -123,34 +141,47 @@ describe("Domain Core", () => {
     expect(bus.handlerCount("LanguageChangedEvent")).toBe(0);
   });
 
-  it("generates valid RFC4122 v4 UUIDs across native and byte fallback paths", () => {
+  it("generates valid RFC4122 v4 UUIDs across randomUUID, getRandomValues, and fallback paths", () => {
     const directUuid = generateUUID();
-    expect(directUuid).toMatch(/^[0-9a-f-]{36}$/i);
-
-    const spy = jest.spyOn(Crypto, "randomUUID").mockImplementation(() => {
-      throw new Error("unavailable");
-    });
-    const origCrypto = globalThis.crypto;
-    Object.defineProperty(globalThis, "crypto", {
-      value: {
-        randomUUID: () => {
-          throw new Error("web crypto unavailable");
-        },
-      },
-      configurable: true,
-    });
-    jest.spyOn(Crypto, "getRandomBytes").mockReturnValue(new Uint8Array(31).fill(0xab));
-
-    const fallbackUuid = generateUUID();
-    expect(fallbackUuid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    expect(directUuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
 
-    Object.defineProperty(globalThis, "crypto", { value: origCrypto, configurable: true });
-    spy.mockRestore();
+    const origCrypto = globalThis.crypto;
+    try {
+      Object.defineProperty(globalThis, "crypto", {
+        value: {
+          getRandomValues: (bytes: Uint8Array) => {
+            bytes.fill(0xab);
+            return bytes;
+          },
+        },
+        configurable: true,
+      });
+      const bytesUuid = generateUUID();
+      expect(bytesUuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+
+      Object.defineProperty(globalThis, "crypto", {
+        value: {
+          randomUUID: () => {
+            throw new Error("unavailable");
+          },
+        },
+        configurable: true,
+      });
+      const mathFallbackUuid = generateUUID();
+      expect(mathFallbackUuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+      expect(mathFallbackUuid).not.toBe(directUuid);
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { value: origCrypto, configurable: true });
+    }
   });
 
-  it("executes audio recording use cases", async () => {
+  it("executes audio recording use cases and enforces active recording guard", async () => {
     const sampleVoice: VoiceNote = {
       uri: "file:///voice.m4a",
       durationMs: 2500,
@@ -166,6 +197,15 @@ describe("Domain Core", () => {
     };
 
     expect(isOk(await new StartVoiceRecordingUseCase(audioService).execute())).toBe(true);
+
+    audioService.isRecording.mockReturnValueOnce(true);
+    const activeErr = await new StartVoiceRecordingUseCase(audioService).execute();
+    expect(isErr(activeErr) && activeErr.error.code).toBe("RECORDING_ALREADY_ACTIVE");
+
+    audioService.startRecording.mockResolvedValueOnce(err(new PermissionError("No mic")));
+    const permRes = await new StartVoiceRecordingUseCase(audioService).execute();
+    expect(isErr(permRes) && permRes.error).toBeInstanceOf(PermissionError);
+
     const stopRes = await new StopVoiceRecordingUseCase(audioService).execute();
     expect(isOk(stopRes) && stopRes.value.uri).toBe("file:///voice.m4a");
     expect(isOk(await new CancelVoiceRecordingUseCase(audioService).execute())).toBe(true);

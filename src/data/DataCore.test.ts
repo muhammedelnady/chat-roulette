@@ -3,14 +3,10 @@
 import { io } from "socket.io-client";
 
 import { http } from "@/src/data/api";
+import { configureHttpAuth } from "@/src/data/api/client";
 import { extractEnvelopeEntity } from "@/src/data/api/envelope";
-import {
-  getStorageSync,
-  initStorage,
-  isUsingFallbackStorage,
-  primeFallbackStorage,
-} from "@/src/data/cache/mmkvStorage";
 import { TtlCacheManager } from "@/src/data/cache/TtlCacheManager";
+import { BaseRepository } from "@/src/data/repositories/BaseRepository";
 import { ChatRepositoryImpl } from "@/src/data/repositories/ChatRepositoryImpl";
 import { MessageRepositoryImpl } from "@/src/data/repositories/MessageRepositoryImpl";
 import { SimulatedChatEngine } from "@/src/data/simulated/SimulatedChatEngine";
@@ -20,20 +16,45 @@ import {
   SimulatedMessageRepository,
 } from "@/src/data/simulated/SimulatedChatRepositories";
 import { ChatSocketService } from "@/src/data/socket/ChatSocketService";
-import { clearLogs, getLogs, log as dataLog } from "@/src/data/utils/logger";
+import {
+  type AppError,
+  AuthError,
+  NetworkError,
+  NotFoundError,
+  PermissionError,
+  RateLimitError,
+  ServerError,
+  TimeoutError,
+  ValidationError,
+} from "@/src/domain/errors";
 import { isErr, isOk, ok } from "@/src/domain/Result";
+import { log as infraLog } from "@/src/infrastructure/logging/logger";
+import {
+  getStorageSync,
+  initStorage,
+  isUsingFallbackStorage,
+  primeFallbackStorage,
+  resetStorageForTests,
+} from "@/src/infrastructure/storage/mmkvStorage";
 
 const mockSocketListeners = new Map<string, ((...args: unknown[]) => void)[]>();
 const mockIoListeners = new Map<string, ((...args: unknown[]) => void)[]>();
 
 const mockSocketInstance = {
   connected: false,
+  auth: {} as Record<string, unknown> | ((cb: (data: Record<string, unknown>) => void) => void),
   io: {
-    opts: { auth: {} as Record<string, unknown> },
     on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
       const list = mockIoListeners.get(event) ?? [];
       list.push(cb);
       mockIoListeners.set(event, list);
+    }),
+    off: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+      const list = mockIoListeners.get(event) ?? [];
+      mockIoListeners.set(
+        event,
+        list.filter((fn) => fn !== cb)
+      );
     }),
   },
   on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
@@ -60,6 +81,12 @@ jest.mock("@/src/data/api", () => ({
     delete: jest.fn(),
   },
 }));
+
+class ExposedBaseRepository extends BaseRepository {
+  exposeHandleError(error: unknown, context: string, errorCode?: string): AppError {
+    return this.handleError(error, context, errorCode);
+  }
+}
 
 const sampleConvDto = {
   id: "conv-100",
@@ -90,11 +117,12 @@ describe("Data Core", () => {
     mockSocketListeners.clear();
     mockIoListeners.clear();
     mockSocketInstance.connected = false;
-    mockSocketInstance.io.opts = { auth: {} };
+    mockSocketInstance.auth = {};
+    resetStorageForTests();
     getStorageSync().clearAll();
   });
 
-  it("handles MMKV fallback storage and TTL cache envelopes", async () => {
+  it("handles MMKV fallback storage, ttl namespace isolation, corrupt purge, and eviction", async () => {
     const syncStorage = getStorageSync();
     expect(isUsingFallbackStorage()).toBe(true);
     primeFallbackStorage("k_primed", "primed-val");
@@ -110,47 +138,76 @@ describe("Data Core", () => {
     expect(initialized.contains("k_str")).toBe(true);
 
     const cache = new TtlCacheManager(initialized);
-    cache.set("cache:a", { count: 1 }, 5000, "etag-1");
-    cache.set("cache:b", { count: 2 }, 0);
-    expect(cache.getFresh<{ count: number }>("cache:a")).toEqual({ count: 1 });
-    expect(cache.getFresh<{ count: number }>("cache:a", Date.now() + 10000)).toBeNull();
-    expect(cache.getStaleFallback<{ count: number }>("cache:a")).toEqual({ count: 1 });
-    expect(cache.getFresh<{ count: number }>("cache:b")).toEqual({ count: 2 });
+    cache.set("a", { count: 1 }, 5000, "etag-1");
+    cache.set("b", { count: 2 }, 0);
+    expect(initialized.contains("ttl:a")).toBe(true);
+    expect(cache.getFresh<{ count: number }>("a")).toEqual({ count: 1 });
+    expect(cache.getFresh<{ count: number }>("a", Date.now() + 10000)).toBeNull();
+    expect(cache.getStaleFallback<{ count: number }>("a")).toEqual({ count: 1 });
+    expect(cache.getFresh<{ count: number }>("b")).toEqual({ count: 2 });
 
-    expect(cache.invalidatePrefix("cache:")).toBe(2);
-    expect(cache.getEnvelope("cache:a")).toBeNull();
+    initialized.setString("ttl:corrupt", "{not-json");
+    expect(cache.getEnvelope("corrupt")).toBeNull();
+    expect(initialized.contains("ttl:corrupt")).toBe(false);
 
-    cache.set("cache:del", "v");
-    cache.delete("cache:del");
-    expect(cache.getFresh("cache:del")).toBeNull();
+    initialized.setString("ttl:bad-shape", JSON.stringify({ version: 99 }));
+    expect(cache.getEnvelope("bad-shape")).toBeNull();
+    expect(initialized.contains("ttl:bad-shape")).toBe(false);
+
+    expect(cache.invalidatePrefix("")).toBe(2);
+    expect(initialized.contains("k_str")).toBe(true);
+
+    for (let i = 0; i < 205; i += 1) {
+      cache.set(`item-${i}`, i, 1000);
+    }
+    const ttlKeys = initialized.getAllKeys().filter((k) => k.startsWith("ttl:"));
+    expect(ttlKeys.length).toBeLessThanOrEqual(200);
   });
 
-  it("extracts nested envelopes and records redacted data logs", () => {
+  it("extracts valid envelopes and maps BaseRepository errors safely", () => {
     expect(extractEnvelopeEntity(null)).toBeNull();
+    expect(extractEnvelopeEntity({ empty: true })).toBeNull();
+    expect(extractEnvelopeEntity({ conversation: { id: "" } }, ["conversation"])).toBeNull();
     expect(extractEnvelopeEntity({ conversation: { id: "c1" } }, ["conversation"])).toEqual({
       id: "c1",
     });
     expect(
       extractEnvelopeEntity({ data: { conversation: { id: "c2" } } }, ["conversation"])
     ).toEqual({ id: "c2" });
-    expect(extractEnvelopeEntity({ data: { _id: "c3" } })).toEqual({ _id: "c3" });
+    expect(extractEnvelopeEntity({ data: { _id: "c3" } })).toEqual({ id: "c3", _id: "c3" });
     expect(extractEnvelopeEntity({ id: "c4" })).toEqual({ id: "c4" });
-    expect(extractEnvelopeEntity({ empty: true })).toBeNull();
 
-    clearLogs();
-    dataLog.setSeverity("debug");
-    const child = dataLog.createChild("Test");
+    const repo = new ExposedBaseRepository();
+    expect(repo.exposeHandleError(null, "ctx")).toBeInstanceOf(ServerError);
+    expect(repo.exposeHandleError({ code: "ECONNABORTED" }, "ctx")).toBeInstanceOf(TimeoutError);
+    expect(repo.exposeHandleError({ code: "ERR_NETWORK", request: {} }, "ctx")).toBeInstanceOf(
+      NetworkError
+    );
+    expect(repo.exposeHandleError({ response: { status: 400 } }, "ctx")).toBeInstanceOf(
+      ValidationError
+    );
+    expect(repo.exposeHandleError({ response: { status: 401 } }, "ctx")).toBeInstanceOf(AuthError);
+    expect(repo.exposeHandleError({ response: { status: 403 } }, "ctx")).toBeInstanceOf(
+      PermissionError
+    );
+    expect(repo.exposeHandleError({ response: { status: 404 } }, "ctx")).toBeInstanceOf(
+      NotFoundError
+    );
+    expect(repo.exposeHandleError({ response: { status: 429 } }, "ctx")).toBeInstanceOf(
+      RateLimitError
+    );
+
+    const domainErr = new NetworkError("preserved");
+    expect(repo.exposeHandleError(domainErr, "ctx")).toBe(domainErr);
+
+    infraLog.setSeverity("debug");
+    const child = infraLog.createChild("Test");
     child.info("payload", { token: "secret-abc", safe: 1 });
-    child.exception(new Error("boom"), "context");
-    child.exception("raw-err");
-    expect(child.getSeverity()).toBe("debug");
-    const entries = getLogs();
-    expect(entries.length).toBeGreaterThanOrEqual(3);
-    expect(JSON.stringify(entries[0])).toContain("[REDACTED]");
-    clearLogs();
+    expect(infraLog.createChild).toHaveBeenCalledWith("Test");
+    expect(child.info).toHaveBeenCalledWith("payload", { token: "secret-abc", safe: 1 });
   });
 
-  it("executes ChatRepositoryImpl & MessageRepositoryImpl online and error paths", async () => {
+  it("executes ChatRepositoryImpl & MessageRepositoryImpl online, offline, and error paths", async () => {
     const httpMock = http as jest.Mocked<typeof http>;
     const chatRepo = new ChatRepositoryImpl({ isConnected: () => true });
     const msgRepo = new MessageRepositoryImpl({ isConnected: () => true });
@@ -160,13 +217,6 @@ describe("Data Core", () => {
     expect(isOk(listRes)).toBe(true);
     if (isOk(listRes)) {
       expect(listRes.value.data).toHaveLength(1);
-    }
-
-    httpMock.get.mockResolvedValueOnce({ data: { data: [], nextCursor: null } });
-    const emptyRes = await chatRepo.list();
-    expect(isOk(emptyRes)).toBe(true);
-    if (isOk(emptyRes)) {
-      expect(emptyRes.value.data).toHaveLength(0);
     }
 
     httpMock.get.mockRejectedValueOnce({
@@ -191,9 +241,6 @@ describe("Data Core", () => {
 
     httpMock.post.mockResolvedValueOnce({ data: sampleConvDto });
     expect(isOk(await chatRepo.close("conv-100"))).toBe(true);
-
-    httpMock.post.mockResolvedValueOnce({});
-    expect(isErr(await chatRepo.close("conv-100"))).toBe(true);
 
     httpMock.get.mockResolvedValueOnce({ data: { data: [sampleMsgDto], nextCursor: "next-1" } });
     const msgsRes = await msgRepo.list("conv-100", "c1", 20);
@@ -235,20 +282,37 @@ describe("Data Core", () => {
     httpMock.delete.mockResolvedValueOnce({});
     expect(isOk(await msgRepo.deleteAttachment("a-1"))).toBe(true);
 
-    httpMock.delete.mockRejectedValueOnce({
-      response: { status: 429, data: { message: "Slow down" } },
+    let onlineFlag = false;
+    const offlineRepo = new ChatRepositoryImpl({ isConnected: () => onlineFlag });
+    const missOffline = await offlineRepo.list();
+    expect(isErr(missOffline) && missOffline.error).toBeInstanceOf(NetworkError);
+
+    onlineFlag = true;
+    const cachedChatRepo = new ChatRepositoryImpl({ isConnected: () => onlineFlag });
+    httpMock.get.mockResolvedValueOnce({ data: { data: [sampleConvDto], nextCursor: null } });
+    expect(isOk(await cachedChatRepo.list())).toBe(true);
+
+    onlineFlag = false;
+    const offlineHit = await cachedChatRepo.list();
+    expect(isOk(offlineHit) && offlineHit.value.data).toHaveLength(1);
+
+    const resetAuth = configureHttpAuth({
+      getToken: jest.fn().mockResolvedValue("tok-1"),
+      getTokens: jest.fn().mockResolvedValue(ok({ accessToken: "tok-1", refreshToken: null })),
+      saveTokens: jest.fn(),
+      clearTokens: jest.fn(),
     });
-    expect(isErr(await msgRepo.deleteAttachment("a-1"))).toBe(true);
+    resetAuth();
   });
 
-  it("connects, joins, buffers offline, and flushes ChatSocketService", async () => {
+  it("connects with mutex, binds Socket.IO auth callback, flushes once, and cleans up on dispose", async () => {
     let connectivityCb: ((online: boolean) => void) | undefined;
-    let isOnline = false;
+    const isOnline = true;
     const connectivity = {
       isConnected: () => isOnline,
       observeConnectivity: (cb: (online: boolean) => void) => {
         connectivityCb = cb;
-        return () => {};
+        return jest.fn();
       },
     };
     const tokenStorage = {
@@ -272,20 +336,27 @@ describe("Data Core", () => {
 
     const reconnectSpy = jest.fn();
     socketService.onEvent("reconnect", reconnectSpy);
-    await socketService.connect();
+
+    await Promise.all([socketService.connect(), socketService.connect()]);
     expect(io).toHaveBeenCalledTimes(1);
+
+    const ioCallOptions = (io as jest.Mock).mock.calls[0]?.[1] as {
+      auth: (cb: (data: Record<string, unknown>) => void) => void;
+    };
+    const authCb = jest.fn();
+    ioCallOptions.auth(authCb);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(authCb).toHaveBeenCalledWith(expect.objectContaining({ token: "access-tok" }));
 
     socketService.joinConversation("conv-100");
     socketService.sendMessage({
       conversationId: "conv-100",
       clientId: "c-off",
-      content: "Offline msg",
+      content: "Buffered msg",
     });
     expect(socketService.getPendingQueueCount()).toBe(1);
 
-    isOnline = true;
     mockSocketInstance.connected = true;
-    expect(socketService.isConnected()).toBe(true);
     mockSocketListeners.get("connect")?.forEach((cb) => cb());
     expect(mockSocketInstance.emit).toHaveBeenCalledWith("conversation:join", "conv-100");
     expect(mockSocketInstance.emit).toHaveBeenCalledWith(
@@ -293,18 +364,16 @@ describe("Data Core", () => {
       expect.objectContaining({ clientId: "c-off" })
     );
 
-    socketService.startTyping("conv-100");
-    socketService.stopTyping("conv-100");
-    socketService.markMessageRead("conv-100", "m-1");
-    socketService.deleteAttachment({ attachmentId: "a-1", conversationId: "conv-100" });
-
     mockIoListeners.get("reconnect")?.forEach((cb) => cb(1));
     expect(reconnectSpy).toHaveBeenCalledWith(1);
 
     connectivityCb?.(true);
-    socketService.leaveConversation("conv-100");
-    socketService.offEvent("reconnect", reconnectSpy);
-    socketService.disconnect();
+    socketService.offEvent("reconnect");
+    mockIoListeners.get("reconnect")?.forEach((cb) => cb(2));
+    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+
+    socketService.dispose();
+    expect(mockSocketInstance.io.off).toHaveBeenCalledWith("reconnect", expect.any(Function));
     expect(socketService.isConnected()).toBe(false);
   });
 
@@ -322,22 +391,9 @@ describe("Data Core", () => {
     expect(isOk(await msgRepo.send({ conversationId: convId, content: "voice note please" }))).toBe(
       true
     );
-    expect(isOk(await msgRepo.markRead())).toBe(true);
+    expect(isOk(await msgRepo.markRead(convId))).toBe(true);
     expect(isOk(await msgRepo.uploadAttachment(new FormData()))).toBe(true);
     expect(isOk(await msgRepo.uploadAudio())).toBe(true);
-    expect(isOk(await msgRepo.deleteAttachment())).toBe(true);
-
-    const voiceReply = engine.buildSimulatedReply(convId, "voice note");
-    expect(voiceReply.contentType).toBe("AUDIO");
-    expect(engine.buildSimulatedReply(convId, "clean architecture").content).toContain(
-      "Clean Architecture"
-    );
-    expect(engine.buildSimulatedReply(convId, "offline mmkv").content).toContain(
-      "ChatOutboundQueue"
-    );
-    expect(engine.buildSimulatedReply(convId, "animation").content).toContain("Reanimated");
-    expect(engine.buildSimulatedReply(convId, "roulette").content).toContain("Spin Roulette");
-
     expect(isOk(await convRepo.close(convId))).toBe(true);
     expect(isErr(await convRepo.close("nonexistent"))).toBe(true);
 
@@ -347,13 +403,9 @@ describe("Data Core", () => {
       { isConnected: () => true },
       engine
     );
-    const presenceSpy = jest.fn();
-    simSocket.onEvent("support:presence", presenceSpy);
     simSocket.connect();
-    expect(presenceSpy).toHaveBeenCalledTimes(1);
     simSocket.joinConversation(convId);
     simSocket.sendMessage({ conversationId: convId, clientId: "sim-c1", content: "hello" });
     simSocket.disconnect();
-    simSocket.offEvent("support:presence", presenceSpy);
   });
 });

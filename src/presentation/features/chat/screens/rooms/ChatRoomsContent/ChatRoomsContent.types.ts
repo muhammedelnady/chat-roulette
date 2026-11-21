@@ -7,6 +7,8 @@ export interface ChatRoomsViewModel {
   readonly selectedCategory: ChatRoomCategory;
   readonly searchQuery: string;
   readonly isLoading: boolean;
+  readonly isRefreshing: boolean;
+  readonly error: string | null;
   readonly isOnline: boolean;
   readonly isDark: boolean;
   readonly isRTL: boolean;

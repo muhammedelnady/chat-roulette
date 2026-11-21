@@ -72,6 +72,9 @@ for (const file of presentationFiles) {
   if (/import\s+{[^}]*TouchableOpacity[^}]*}\s+from\s+["']react-native["']/.test(content)) {
     error("SYM-ONE-04", `Forbidden TouchableOpacity import: ${relPath}`);
   }
+  if (/from\s+["']expo-haptics["']/.test(content)) {
+    error("SYM-ARCH-05", `Direct expo-haptics import in presentation: ${relPath}`);
+  }
 }
 
 const allSrcFiles = getFiles(path.join(rootDir, "src"));
@@ -91,14 +94,19 @@ for (const file of allSrcFiles) {
   if (!isTestOrMockFile(file)) {
     if (relPath.includes("/domain/")) {
       if (
-        /from\s+["'][^"']*(\/data\/|@data|\/presentation\/|@presentation|\/infrastructure\/|@infrastructure)/.test(
+        /from\s+["'][^"']*(\/data\/|@data|\/presentation\/|@presentation|\/infrastructure\/|@infrastructure|expo-|react-native)/.test(
           content
         )
       ) {
         error(
           "SYM-ARCH-01",
-          `Domain file imports Data, Infrastructure, or Presentation: ${relPath}`
+          `Domain file imports Data, Infrastructure, Presentation, or Platform SDK: ${relPath}`
         );
+      }
+    }
+    if (relPath.includes("/infrastructure/")) {
+      if (/from\s+["'][^"']*(\/data\/|@data)/.test(content)) {
+        error("SYM-ARCH-03", `Infrastructure file imports Data directly: ${relPath}`);
       }
     }
     if (relPath.includes("/presentation/")) {

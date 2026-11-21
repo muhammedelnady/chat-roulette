@@ -14,3 +14,9 @@ export function mapAttachmentEntity(att: ChatAttachmentEntity) {
     cloudinaryId: att.cloudinaryId ?? undefined,
   };
 }
+
+export function createFileFormData(uri: string, name: string, type: string): FormData {
+  const formData = new FormData();
+  formData.append("file", { uri, name, type } as unknown as Blob);
+  return formData;
+}

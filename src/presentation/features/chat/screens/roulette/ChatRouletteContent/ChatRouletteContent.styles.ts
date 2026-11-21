@@ -10,14 +10,14 @@ export const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingTop: 10,
+    paddingBottom: 16,
     gap: 12,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -25,7 +25,12 @@ export const styles = StyleSheet.create({
   headerTextGroup: {
     flex: 1,
   },
+  headerTitle: {
+    letterSpacing: -0.3,
+  },
   sectionTitle: {
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
     marginBottom: 10,
   },
   topicsWrap: {
@@ -35,15 +40,47 @@ export const styles = StyleSheet.create({
     marginBottom: 16,
   },
   topicChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
+    gap: 6,
+  },
+  topicChipDisabled: {
+    opacity: 0.5,
+  },
+  telemetryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 6,
+    marginBottom: 4,
   },
   statusContainer: {
     alignItems: "center",
     marginBottom: 20,
     gap: 4,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: 16,
+  },
+  errorText: {
+    flexShrink: 1,
   },
   footerCta: {
     marginTop: "auto",

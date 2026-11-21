@@ -21,6 +21,7 @@ export type ChatConversationStatus = ConversationStatus;
 export type ChatRoomCategory = RoomCategory;
 
 export interface StagedAttachment {
+  readonly localId?: string;
   readonly uri: string;
   readonly name: string;
   readonly type: string;

@@ -4,18 +4,19 @@ import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
   container: {
-    minWidth: 215,
+    minWidth: 222,
     paddingVertical: 4,
+    direction: "ltr",
   },
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
   },
   playButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -24,30 +25,38 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    height: 30,
+    height: 32,
+  },
+  waveformBarButton: {
+    flex: 1,
+    height: 32,
+    justifyContent: "center",
   },
   waveformBar: {
-    flex: 1,
+    width: "100%",
     minWidth: 3,
-    borderRadius: 2,
+    borderRadius: 999,
   },
   speedButton: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
     borderWidth: 1,
   },
   speedText: {
     fontSize: 10,
     fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 4,
+    marginTop: 5,
     paddingHorizontal: 2,
   },
   timeText: {
     fontSize: 10,
+    opacity: 0.85,
+    fontVariant: ["tabular-nums"],
   },
 });

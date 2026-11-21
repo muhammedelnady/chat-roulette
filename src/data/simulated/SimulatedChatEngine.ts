@@ -12,6 +12,24 @@ import {
   ROULETTE_PERSONAS,
 } from "./SimulatedChatDataset";
 
+function cloneUnknown(val: unknown): unknown {
+  if (val === null || typeof val !== "object") return val;
+  if (Array.isArray(val)) return val.map(cloneUnknown);
+  return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, cloneUnknown(v)]));
+}
+
+function cloneMessage(msg: MessageEntity): MessageEntity {
+  return {
+    ...msg,
+    metadata: msg.metadata ? (cloneUnknown(msg.metadata) as Record<string, unknown>) : msg.metadata,
+    attachments: msg.attachments.map((att) => ({ ...att })),
+    readReceipts: msg.readReceipts ? msg.readReceipts.map((r) => ({ ...r })) : undefined,
+    reactions: msg.reactions
+      ? Object.fromEntries(Object.entries(msg.reactions).map(([k, v]) => [k, [...v]]))
+      : undefined,
+  };
+}
+
 function cloneConversation(conv: ConversationEntity): ConversationEntity {
   return {
     ...conv,
@@ -19,18 +37,7 @@ function cloneConversation(conv: ConversationEntity): ConversationEntity {
       ...p,
       user: p.user ? { ...p.user } : undefined,
     })),
-    lastMessage: conv.lastMessage ? { ...conv.lastMessage } : conv.lastMessage,
-  };
-}
-
-function cloneMessage(msg: MessageEntity): MessageEntity {
-  return {
-    ...msg,
-    attachments: [...msg.attachments],
-    readReceipts: msg.readReceipts ? [...msg.readReceipts] : undefined,
-    reactions: msg.reactions
-      ? Object.fromEntries(Object.entries(msg.reactions).map(([k, v]) => [k, [...v]]))
-      : undefined,
+    lastMessage: conv.lastMessage ? cloneMessage(conv.lastMessage) : conv.lastMessage,
   };
 }
 
@@ -50,7 +57,7 @@ export class SimulatedChatEngine {
       const lastMessage = seededMessages[seededMessages.length - 1] ?? null;
       this.conversations.set(conv.id, {
         ...cloneConversation(conv),
-        lastMessage,
+        lastMessage: lastMessage ? cloneMessage(lastMessage) : null,
       });
     }
   }
@@ -58,7 +65,7 @@ export class SimulatedChatEngine {
   listConversations(): ConversationEntity[] {
     return Array.from(this.conversations.values())
       .map(cloneConversation)
-      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+      .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   }
 
   getConversationById(conversationId: string): ConversationEntity | null {
@@ -123,7 +130,7 @@ export class SimulatedChatEngine {
       return this.createConversation({ scope: "ROULETTE", subject: "Instant Match" });
     }
 
-    const id = `roulette-${persona.id}-${Date.now().toString(36)}`;
+    const id = `roulette-${persona.id}-${generateUUID().slice(0, 8)}`;
     const nowIso = new Date().toISOString();
     const openerMessage: MessageEntity = {
       id: `msg-${generateUUID().slice(0, 8)}`,
@@ -185,6 +192,15 @@ export class SimulatedChatEngine {
     return cloneConversation(updated);
   }
 
+  markConversationRead(conversationId: string): void {
+    const existing = this.conversations.get(conversationId);
+    if (!existing || existing.unreadCount === 0) return;
+    this.conversations.set(conversationId, {
+      ...existing,
+      unreadCount: 0,
+    });
+  }
+
   listMessages(conversationId: string): MessageEntity[] {
     return (this.messages.get(conversationId) ?? []).map(cloneMessage);
   }
@@ -195,6 +211,7 @@ export class SimulatedChatEngine {
       (item) => item.clientId === message.clientId || (message.id && item.id === message.id)
     );
     const stored = cloneMessage(message);
+    const isNew = idx < 0;
     if (idx >= 0) {
       list[idx] = stored;
     } else {
@@ -204,15 +221,52 @@ export class SimulatedChatEngine {
 
     const conv = this.conversations.get(conversationId);
     if (conv) {
+      const nextUnread =
+        stored.senderType === "USER"
+          ? 0
+          : isNew
+            ? (conv.unreadCount ?? 0) + 1
+            : (conv.unreadCount ?? 0);
       this.conversations.set(conversationId, {
         ...conv,
-        lastMessage: stored,
+        lastMessage: cloneMessage(stored),
         updatedAt: stored.createdAt,
-        unreadCount: 0,
+        unreadCount: nextUnread,
       });
     }
 
     return cloneMessage(stored);
+  }
+
+  deleteAttachment(attachmentId: string): void {
+    const nowIso = new Date().toISOString();
+    for (const [convId, list] of this.messages.entries()) {
+      const hasMatch = list.some((msg) =>
+        msg.attachments.some((att) => att.id === attachmentId || att.uploadId === attachmentId)
+      );
+      if (!hasMatch) continue;
+      const nextList = list.map((msg) => {
+        if (
+          !msg.attachments.some((att) => att.id === attachmentId || att.uploadId === attachmentId)
+        ) {
+          return msg;
+        }
+        return {
+          ...msg,
+          attachments: msg.attachments.map((att) =>
+            att.id === attachmentId || att.uploadId === attachmentId
+              ? { ...att, deletedAt: nowIso }
+              : att
+          ),
+        };
+      });
+      this.messages.set(convId, nextList);
+      const conv = this.conversations.get(convId);
+      const latest = nextList[nextList.length - 1];
+      if (conv && latest && conv.lastMessage?.id === latest.id) {
+        this.conversations.set(convId, { ...conv, lastMessage: cloneMessage(latest) });
+      }
+    }
   }
 
   toggleReaction(conversationId: string, messageId: string, emoji: string): MessageEntity | null {
@@ -242,6 +296,15 @@ export class SimulatedChatEngine {
       reactions: currentReactions,
     };
     list[idx] = updated;
+
+    const conv = this.conversations.get(conversationId);
+    if (
+      conv?.lastMessage &&
+      (conv.lastMessage.id === updated.id || conv.lastMessage.clientId === updated.clientId)
+    ) {
+      this.conversations.set(conversationId, { ...conv, lastMessage: cloneMessage(updated) });
+    }
+
     return cloneMessage(updated);
   }
 

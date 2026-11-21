@@ -1,12 +1,15 @@
 /** @format */
 
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+
+import { AppRoutes } from "@/src/presentation/constants/routes";
 
 export interface ChatNavigation {
   readonly navigateBack: () => void;
   readonly navigateToRooms: () => void;
   readonly navigateToChat: (conversationId: string) => void;
+  readonly replaceWithChat: (conversationId: string) => void;
   readonly navigateToRoulette: () => void;
 }
 
@@ -14,28 +17,43 @@ export function useChatNavigation(): ChatNavigation {
   const router = useRouter();
 
   const navigateBack = useCallback(() => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(AppRoutes.ROOMS);
+    }
   }, [router]);
 
   const navigateToRooms = useCallback(() => {
-    router.replace("/rooms" as const);
+    router.replace(AppRoutes.ROOMS);
   }, [router]);
 
   const navigateToChat = useCallback(
     (conversationId: string) => {
-      router.push(`/rooms/${conversationId}` as const);
+      router.push(`${AppRoutes.ROOMS}/${encodeURIComponent(conversationId)}`);
+    },
+    [router]
+  );
+
+  const replaceWithChat = useCallback(
+    (conversationId: string) => {
+      router.replace(`${AppRoutes.ROOMS}/${encodeURIComponent(conversationId)}`);
     },
     [router]
   );
 
   const navigateToRoulette = useCallback(() => {
-    router.push("/rooms/roulette" as const);
+    router.push(AppRoutes.ROULETTE);
   }, [router]);
 
-  return {
-    navigateBack,
-    navigateToRooms,
-    navigateToChat,
-    navigateToRoulette,
-  };
+  return useMemo(
+    () => ({
+      navigateBack,
+      navigateToRooms,
+      navigateToChat,
+      replaceWithChat,
+      navigateToRoulette,
+    }),
+    [navigateBack, navigateToRooms, navigateToChat, replaceWithChat, navigateToRoulette]
+  );
 }

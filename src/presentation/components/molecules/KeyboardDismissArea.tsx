@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Keyboard, Platform } from "react-native";
+import { Keyboard } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import { KeyboardController } from "react-native-keyboard-controller";
 import { useSharedValue } from "react-native-reanimated";
@@ -36,7 +36,7 @@ export function KeyboardDismissArea({ children }: KeyboardDismissAreaProps) {
 
   const pan = usePanGesture({
     activeOffsetY: [-10, 10],
-    enabled: Platform.OS === "ios" || isKeyboardVisible,
+    enabled: isKeyboardVisible,
     onBegin: () => {
       wasActive.set(false);
     },

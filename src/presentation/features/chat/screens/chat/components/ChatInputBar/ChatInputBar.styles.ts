@@ -5,7 +5,7 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     borderTopWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   stagingTray: {
@@ -17,9 +17,11 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   stagedItem: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1,
     overflow: "hidden",
   },
   stagedThumbnail: {
@@ -35,24 +37,28 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  dismissBadge: {
+  dismissBadgeContainer: {
     position: "absolute",
     top: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    end: 4,
+    zIndex: 2,
+  },
+  dismissBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
+    gap: 8,
   },
   attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -60,11 +66,11 @@ export const styles = StyleSheet.create({
   inputWrapper: {
     flex: 1,
     borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    borderWidth: 1.25,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
     minHeight: 42,
-    maxHeight: 110,
+    maxHeight: 112,
     justifyContent: "center",
   },
   input: {
@@ -77,11 +83,19 @@ export const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  gradientActionFill: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -95,13 +109,19 @@ export const styles = StyleSheet.create({
     height: 42,
     gap: 8,
   },
-  recordingDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
   recordingLabel: {
     flex: 1,
+  },
+  recordingMeter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    height: 18,
+  },
+  recordingMeterBar: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
   },
   recordingTimer: {
     fontVariant: ["tabular-nums"],

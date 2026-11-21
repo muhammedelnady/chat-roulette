@@ -8,7 +8,11 @@ import { ChatContent } from "@/src/presentation/features/chat";
 const RESERVED_ROUTE_NAMES = new Set(["index", "roulette"]);
 
 export default function ChatRoomScreen() {
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const params = useLocalSearchParams<{ conversationId?: string | string[] }>();
+  const rawConversationId = params.conversationId;
+  const conversationId = Array.isArray(rawConversationId)
+    ? rawConversationId[0]
+    : rawConversationId;
 
   if (!conversationId || RESERVED_ROUTE_NAMES.has(conversationId)) {
     return <Redirect href="/rooms" />;

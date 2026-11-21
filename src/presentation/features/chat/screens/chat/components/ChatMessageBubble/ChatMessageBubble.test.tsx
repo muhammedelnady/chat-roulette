@@ -23,28 +23,61 @@ const baseMessage: ChatMessageEntity = {
 };
 
 describe("ChatMessageBubble", () => {
-  it("renders message text, sender name, and triggers reaction toggle", async () => {
+  it("renders message text, sender name, and triggers reaction picker and toggle", async () => {
     const onToggleReaction = jest.fn();
     await render(<ChatMessageBubble message={baseMessage} onToggleReaction={onToggleReaction} />);
 
     expect(screen.getByText("Sarah Chen")).toBeTruthy();
     expect(screen.getByText("Welcome to Chat Roulette!")).toBeTruthy();
 
+    await fireEvent(screen.getByTestId(CHAT_MESSAGE_BUBBLE_TEST_IDS.BUBBLE), "longPress");
+    expect(screen.getByLabelText("React with 🔥")).toBeTruthy();
+
     await fireEvent.press(screen.getByTestId(CHAT_MESSAGE_BUBBLE_TEST_IDS.REACTION_PILL("⚡")));
     expect(onToggleReaction).toHaveBeenCalledWith("m-1", "⚡");
   });
 
-  it("supports retry action on failed outbound messages", async () => {
+  it("supports retry action on failed outbound messages and image lightbox callback", async () => {
     const onRetry = jest.fn();
+    const onPreviewImage = jest.fn();
     await render(
       <ChatMessageBubble
-        message={{ ...baseMessage, senderType: "USER", status: "FAILED" }}
+        message={{
+          ...baseMessage,
+          senderType: "USER",
+          status: "FAILED",
+          attachments: [
+            {
+              id: "att-1",
+              url: "https://cdn.example.com/photo.jpg",
+              mimeType: "image/jpeg",
+              fileName: "photo.jpg",
+              fileSize: 2048,
+            },
+          ],
+        }}
         isOwn
         onRetryMessage={onRetry}
+        onPreviewImage={onPreviewImage}
       />
     );
 
+    await fireEvent.press(screen.getByTestId(CHAT_MESSAGE_BUBBLE_TEST_IDS.ATTACHMENT_IMAGE));
+    expect(onPreviewImage).toHaveBeenCalledWith("https://cdn.example.com/photo.jpg");
+
     await fireEvent.press(screen.getByTestId(CHAT_MESSAGE_BUBBLE_TEST_IDS.RETRY_PRESSABLE));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("safely renders Unicode emoji sender initials without surrogate corruption", async () => {
+    await render(
+      <ChatMessageBubble
+        message={{
+          ...baseMessage,
+          senderName: "🚀 Launch Bot",
+        }}
+      />
+    );
+    expect(screen.getByText("🚀")).toBeTruthy();
   });
 });

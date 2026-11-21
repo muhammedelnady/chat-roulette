@@ -1,26 +1,31 @@
 /** @format */
 
-import NetInfo from "@react-native-community/netinfo";
 import * as Audio from "expo-audio";
-import AudioModule from "expo-audio/build/AudioModule";
+import { AudioModule } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
+import { logger as rnLogs } from "react-native-logs";
 
+import { PermissionError } from "@/src/domain/errors";
 import { isErr, isOk } from "@/src/domain/Result";
+import { HapticFeedbackType } from "@/src/domain/services/HapticFeedbackType";
 import { ConnectivityAdapter } from "@/src/infrastructure/adapters/ConnectivityAdapter";
 import { ExpoAudioRecordingService } from "@/src/infrastructure/audio/ExpoAudioRecordingService";
 import { HapticsService } from "@/src/infrastructure/haptics/HapticsService";
 import { directionFromLangTag } from "@/src/infrastructure/i18n/direction";
 import { resolveLangCode } from "@/src/infrastructure/i18n/resolve-lang";
+import { translate } from "@/src/infrastructure/i18n/translate";
+import type { TxKeyPath } from "@/src/infrastructure/i18n/types";
+import type * as LoggerModule from "@/src/infrastructure/logging/logger";
 import { Logger, log } from "@/src/infrastructure/logging/logger";
 import {
-  clearQueryCache,
-  clientAsyncStorage,
-  queryClient,
-  setupOnlineManager,
-} from "@/src/infrastructure/query/queryClient";
-import { clearAll, getData, removeData, saveData } from "@/src/infrastructure/storage/storage";
+  getStorageSync,
+  initStorage,
+  isUsingFallbackStorage,
+  resetStorageForTests,
+} from "@/src/infrastructure/storage/mmkvStorage";
 import { TOKEN_KEYS, TokenStorageImpl } from "@/src/infrastructure/storage/TokenStorageImpl";
+import type * as ZustandAdapterModule from "@/src/infrastructure/storage/ZustandMMKVAdapter";
 import { zustandMMKVStorage } from "@/src/infrastructure/storage/ZustandMMKVAdapter";
 import {
   env,
@@ -28,7 +33,6 @@ import {
   isProduction,
   isSimulatedChatMode,
 } from "@/src/infrastructure/system/env";
-import { reloadApp } from "@/src/infrastructure/system/reload-app";
 import { IS_EXPO_GO } from "@/src/infrastructure/system/runtime";
 
 const mockSecureStoreMap = new Map<string, string>();
@@ -48,9 +52,10 @@ describe("Infrastructure Core", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSecureStoreMap.clear();
+    resetStorageForTests();
   });
 
-  it("triggers all haptic feedback styles via HapticsService", async () => {
+  it("triggers all haptic feedback styles including trigger(type) and catches native errors", async () => {
     const haptics = new HapticsService();
     await haptics.light();
     await haptics.medium();
@@ -60,9 +65,20 @@ describe("Infrastructure Core", () => {
     await haptics.error();
     await haptics.selection();
 
-    expect(Haptics.impactAsync).toHaveBeenCalledTimes(3);
-    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(3);
-    expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
+    await haptics.trigger(HapticFeedbackType.Light);
+    await haptics.trigger(HapticFeedbackType.Medium);
+    await haptics.trigger(HapticFeedbackType.Heavy);
+    await haptics.trigger(HapticFeedbackType.Success);
+    await haptics.trigger(HapticFeedbackType.Warning);
+    await haptics.trigger(HapticFeedbackType.Error);
+    await haptics.trigger(HapticFeedbackType.Selection);
+
+    expect(Haptics.impactAsync).toHaveBeenCalledTimes(6);
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(6);
+    expect(Haptics.selectionAsync).toHaveBeenCalledTimes(2);
+
+    (Haptics.impactAsync as jest.Mock).mockRejectedValueOnce(new Error("unavailable"));
+    await expect(haptics.light()).resolves.toBeUndefined();
   });
 
   it("reports connectivity state and forwards observer events", () => {
@@ -86,7 +102,7 @@ describe("Infrastructure Core", () => {
     expect(typeof defaultAdapter.observeConnectivity(() => {})).toBe("function");
   });
 
-  it("records, stops, and cancels voice notes in ExpoAudioRecordingService", async () => {
+  it("records, denies with PermissionError, stops stray recorder, and resets audio mode", async () => {
     const service = new ExpoAudioRecordingService();
 
     const emptyStop = await service.stopRecording();
@@ -94,7 +110,7 @@ describe("Infrastructure Core", () => {
 
     (Audio.requestRecordingPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: false });
     const deniedRes = await service.startRecording();
-    expect(isErr(deniedRes) && deniedRes.error.code).toBe("MICROPHONE_PERMISSION_DENIED");
+    expect(isErr(deniedRes) && deniedRes.error).toBeInstanceOf(PermissionError);
 
     const mockRecorder = {
       prepareToRecordAsync: jest.fn().mockResolvedValue(undefined),
@@ -104,7 +120,8 @@ describe("Infrastructure Core", () => {
       uri: "file:///rec-1.m4a",
       currentTime: 3.4,
     };
-    (AudioModule.AudioRecorder as unknown as jest.Mock).mockImplementationOnce(() => mockRecorder);
+    const nativeAudio = AudioModule;
+    (nativeAudio.AudioRecorder as unknown as jest.Mock).mockImplementationOnce(() => mockRecorder);
 
     const startRes = await service.startRecording();
     expect(isOk(startRes)).toBe(true);
@@ -117,8 +134,12 @@ describe("Infrastructure Core", () => {
       expect(stopRes.value.uri).toBe("file:///rec-1.m4a");
       expect(stopRes.value.durationMs).toBe(3400);
     }
+    expect(Audio.setAudioModeAsync).toHaveBeenLastCalledWith({
+      allowsRecording: false,
+      playsInSilentMode: true,
+    });
 
-    (AudioModule.AudioRecorder as unknown as jest.Mock).mockImplementationOnce(() => ({
+    (nativeAudio.AudioRecorder as unknown as jest.Mock).mockImplementationOnce(() => ({
       ...mockRecorder,
       uri: null,
     }));
@@ -126,9 +147,13 @@ describe("Infrastructure Core", () => {
     expect(isOk(await service.cancelRecording())).toBe(true);
     expect(service.isRecording()).toBe(false);
     expect(service.getDurationMs()).toBe(0);
+    expect(Audio.setAudioModeAsync).toHaveBeenLastCalledWith({
+      allowsRecording: false,
+      playsInSilentMode: true,
+    });
   });
 
-  it("saves, retrieves, and clears tokens and secure storage keys", async () => {
+  it("saves, retrieves, and clears tokens in SecureStore", async () => {
     const tokenStorage = new TokenStorageImpl();
     expect(isOk(await tokenStorage.saveTokens("acc-1", "ref-1"))).toBe(true);
     expect(await tokenStorage.getToken()).toBe(mockSecureStoreMap.get(TOKEN_KEYS.ACCESS_TOKEN));
@@ -144,48 +169,85 @@ describe("Infrastructure Core", () => {
 
     (SecureStore.setItemAsync as jest.Mock).mockRejectedValueOnce(new Error("keychain locked"));
     expect(isErr(await tokenStorage.saveTokens("a", "b"))).toBe(true);
-
-    await saveData("pref_a", { theme: "dark" });
-    expect(await getData<{ theme: string }>("pref_a")).toEqual({ theme: "dark" });
-    await removeData("pref_a");
-    expect(await getData("pref_a")).toBeNull();
-    await saveData("pref_b", 123);
-    await clearAll();
-    expect(await getData("pref_b")).toBeNull();
   });
 
-  it("reads/writes ZustandMMKVAdapter, QueryClient cache, env, i18n utils, and runtime", async () => {
+  it("reads/writes mmkvStorage, ZustandMMKVAdapter, logger circular/redaction, env, and i18n", async () => {
+    const storage = await initStorage();
+    expect(isUsingFallbackStorage()).toBe(true);
+    storage.setString("k1", "v1");
+    expect(getStorageSync().getString("k1")).toBe("v1");
+    resetStorageForTests();
+    expect(getStorageSync().getString("k1")).toBeUndefined();
+
     zustandMMKVStorage.setItem("z_key", "z_val");
     expect(await zustandMMKVStorage.getItem("z_key")).toBe("z_val");
     await zustandMMKVStorage.removeItem("z_key");
 
-    await clientAsyncStorage.setItem("q_key", "q_val");
-    expect(await clientAsyncStorage.getItem("q_key")).toBe("q_val");
-    await clientAsyncStorage.removeItem("q_key");
-    expect(await clientAsyncStorage.getItem("q_key")).toBeNull();
-
-    const unsubOnline = setupOnlineManager();
-    expect(NetInfo.addEventListener).toHaveBeenCalled();
-    unsubOnline();
-    clearQueryCache();
-    expect(queryClient).toBeDefined();
+    const realAdapterMod = jest.requireActual<typeof ZustandAdapterModule>(
+      "@/src/infrastructure/storage/ZustandMMKVAdapter"
+    );
+    realAdapterMod.zustandMMKVStorage.setItem("real_z_key", "real_z_val");
+    expect(realAdapterMod.zustandMMKVStorage.getItem("real_z_key")).toBe("real_z_val");
+    expect(realAdapterMod.zustandMMKVStorage.getItem("missing_z_key")).toBeNull();
+    realAdapterMod.zustandMMKVStorage.removeItem("real_z_key");
+    expect(realAdapterMod.zustandMMKVStorage.getItem("real_z_key")).toBeNull();
 
     expect(directionFromLangTag("ar-EG")).toBe("rtl");
     expect(directionFromLangTag("en-US")).toBe("ltr");
     expect(directionFromLangTag()).toBe("ltr");
     expect(resolveLangCode("ar_SA")).toBe("ar");
     expect(resolveLangCode("fr-FR")).toBe("en");
+    expect(translate("en", "toString" as TxKeyPath)).toBe("toString");
 
     expect(env.EXPO_PUBLIC_CHAT_MODE).toBe("simulated");
     expect(isSimulatedChatMode).toBe(true);
     expect(typeof isDevelopment).toBe("boolean");
     expect(typeof isProduction).toBe("boolean");
     expect(typeof IS_EXPO_GO).toBe("boolean");
-    await reloadApp();
 
     const childLog = log.createChild("InfraTest");
     childLog.info("ok");
     childLog.exception(new Error("test"));
     expect(Logger.getInstance()).toBeDefined();
+
+    let formattedLogs = "";
+    jest.isolateModules(() => {
+      const realLoggerMod = jest.requireActual<typeof LoggerModule>(
+        "@/src/infrastructure/logging/logger"
+      );
+      const realLogger = realLoggerMod.Logger.getInstance();
+      realLogger.setSeverity("silly");
+      const circular: Record<string, unknown> = {
+        token: "secret-val",
+        authorization: "Bearer topsecret123",
+      };
+      circular["self"] = circular;
+      realLogger.silly(circular);
+      realLogger.debug("dbg");
+      realLogger.info("inf");
+      realLogger.warn("wrn");
+      realLogger.error("err");
+      realLogger.exception(new Error("boom"), "ctx");
+      realLogger.exception("raw-str");
+
+      const realChild = realLogger.createChild("Sub");
+      realChild.info("child-secret", { refreshToken: "ref-secret" });
+      realChild.exception(new Error("c"), "sub");
+
+      const results = (rnLogs.createLogger as jest.Mock).mock.results;
+      const latestTransport = results[results.length - 1]?.value as
+        { silly: jest.Mock; info: jest.Mock; error: jest.Mock } | undefined;
+      formattedLogs = JSON.stringify({
+        silly: latestTransport?.silly.mock.calls ?? [],
+        info: latestTransport?.info.mock.calls ?? [],
+        error: latestTransport?.error.mock.calls ?? [],
+      });
+    });
+
+    expect(formattedLogs).toContain("[Circular]");
+    expect(formattedLogs).toContain("[REDACTED]");
+    expect(formattedLogs).not.toContain("secret-val");
+    expect(formattedLogs).not.toContain("ref-secret");
+    expect(formattedLogs).not.toContain("topsecret123");
   });
 });

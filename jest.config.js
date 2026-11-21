@@ -9,7 +9,6 @@ module.exports = {
       "|@expo-google-fonts/.*" +
       "|@unimodules/.*" +
       "|unimodules" +
-      "|react-native-svg" +
       "|react-native-reanimated" +
       "|react-native-gesture-handler" +
       "|react-native-keyboard-controller" +
@@ -66,6 +65,5 @@ module.exports = {
     "^@assets/(.*)$": "<rootDir>/src/assets/$1",
     "react-native-keyboard-controller":
       "<rootDir>/src/__mocks__/react-native-keyboard-controller.ts",
-    "\\.svg$": "<rootDir>/src/__mocks__/svgMock.js",
   },
 };

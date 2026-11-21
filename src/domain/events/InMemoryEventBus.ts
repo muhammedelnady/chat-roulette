@@ -8,9 +8,6 @@ import type { ILogger } from "@/src/domain/services/ILogger";
 import type { DomainEvent } from "./DomainEvent";
 import type { EventBus, EventHandler } from "./EventBus";
 
-const isTestEnvironment =
-  process.env.NODE_ENV === "test" || process.env["JEST_WORKER_ID"] !== undefined;
-
 export class InMemoryEventBus implements EventBus {
   private handlers = new Map<string, Set<EventHandler<DomainEvent>>>();
 
@@ -20,40 +17,26 @@ export class InMemoryEventBus implements EventBus {
     const handlers = this.handlers.get(event.eventType);
 
     if (!handlers || handlers.size === 0) {
-      if (!isTestEnvironment) {
-        this.logger?.warn(`No handlers registered for event: ${event.eventType}`);
-      }
+      this.logger?.warn(`No handlers registered for event: ${event.eventType}`);
       return;
     }
 
-    const promises: Promise<void>[] = [];
-
-    for (const handler of handlers) {
-      try {
-        const result = handler(event);
-        if (result instanceof Promise) {
-          promises.push(
-            result.catch((error: unknown) => {
-              if (!isTestEnvironment) {
-                this.logger?.warn(`Handler failed for event ${event.eventType}:`, error);
-              }
-            })
-          );
-        }
-      } catch (error) {
-        if (!isTestEnvironment) {
+    const snapshot = Array.from(handlers);
+    const promises = snapshot.map((handler) =>
+      Promise.resolve()
+        .then(() => handler(event))
+        .catch((error: unknown) => {
           this.logger?.warn(`Handler failed for event ${event.eventType}:`, error);
-        }
-      }
-    }
+        })
+    );
 
-    if (promises.length > 0) {
-      await Promise.all(promises);
-    }
+    await Promise.all(promises);
   }
 
   async publishAll(events: DomainEvent[]): Promise<void> {
-    await Promise.all(events.map((event) => this.publish(event)));
+    for (const event of events) {
+      await this.publish(event);
+    }
   }
 
   subscribe<T extends DomainEvent>(eventType: string, handler: EventHandler<T>): () => void {
@@ -66,7 +49,12 @@ export class InMemoryEventBus implements EventBus {
     handlers.add(typedHandler);
 
     return () => {
-      handlers.delete(typedHandler);
+      const current = this.handlers.get(eventType);
+      if (!current) return;
+      current.delete(typedHandler);
+      if (current.size === 0) {
+        this.handlers.delete(eventType);
+      }
     };
   }
 

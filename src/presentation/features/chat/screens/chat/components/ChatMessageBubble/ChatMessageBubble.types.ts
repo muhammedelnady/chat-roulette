@@ -11,5 +11,6 @@ export interface ChatMessageBubbleProps {
   readonly onSelectFaqOption?: (query: string) => void;
   readonly onRetryMessage?: (message: ChatMessageEntity) => void;
   readonly onToggleReaction?: (messageId: string, emoji: string) => void;
+  readonly onPreviewImage?: (url: string) => void;
   readonly testID?: string;
 }

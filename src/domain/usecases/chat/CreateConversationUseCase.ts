@@ -1,12 +1,13 @@
 /** @format */
 
 import type { ConversationEntity } from "@/src/domain/entities";
-import { AppError } from "@/src/domain/errors";
+import type { AppError } from "@/src/domain/errors";
 import type { IConversationRepository } from "@/src/domain/repositories";
-import { err, isErr, ok, type Result } from "@/src/domain/Result";
+import type { Result } from "@/src/domain/Result";
+import { safeExecute } from "@/src/domain/usecases/safeExecute";
 
 export class CreateConversationUseCase {
-  constructor(private conversationRepository: IConversationRepository) {}
+  constructor(private readonly conversationRepository: IConversationRepository) {}
 
   async execute(params: {
     scope?: string;
@@ -14,16 +15,10 @@ export class CreateConversationUseCase {
     topic?: string;
     category?: string;
   }): Promise<Result<ConversationEntity, AppError>> {
-    try {
-      const result = await this.conversationRepository.create(params);
-      if (isErr(result)) return err(result.error);
-      return ok(result.value);
-    } catch (error) {
-      return err(
-        new AppError("Failed to create conversation", "CONVERSATION_CREATE_FAILED", {
-          originalError: error,
-        })
-      );
-    }
+    return safeExecute(
+      () => this.conversationRepository.create(params),
+      "Failed to create conversation",
+      "CONVERSATION_CREATE_FAILED"
+    );
   }
 }

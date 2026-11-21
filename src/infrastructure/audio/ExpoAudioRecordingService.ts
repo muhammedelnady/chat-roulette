@@ -4,15 +4,15 @@
  */
 
 import {
+  AudioModule,
   type AudioRecorder,
   RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
 } from "expo-audio";
-import AudioModule from "expo-audio/build/AudioModule";
 
 import type { VoiceNote } from "@/src/domain/entities/VoiceNote";
-import { AppError, type DomainError } from "@/src/domain/errors";
+import { AppError, type DomainError, PermissionError } from "@/src/domain/errors";
 import { err, ok, type Result } from "@/src/domain/Result";
 import type { IAudioRecordingService } from "@/src/domain/services/IAudioRecordingService";
 
@@ -20,13 +20,27 @@ export class ExpoAudioRecordingService implements IAudioRecordingService {
   private recorder: AudioRecorder | null = null;
   private startTime = 0;
 
+  private async resetAudioMode(): Promise<void> {
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+    } catch {}
+  }
+
   async startRecording(): Promise<Result<void, DomainError>> {
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        return err(
-          new AppError("Microphone permission was denied", "MICROPHONE_PERMISSION_DENIED")
-        );
+        return err(new PermissionError("Microphone permission was denied"));
+      }
+
+      if (this.recorder) {
+        try {
+          await this.recorder.stop();
+        } catch {}
+        this.recorder = null;
       }
 
       await setAudioModeAsync({
@@ -34,7 +48,8 @@ export class ExpoAudioRecordingService implements IAudioRecordingService {
         playsInSilentMode: true,
       });
 
-      const recorderInstance = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      const nativeAudio = AudioModule;
+      const recorderInstance = new nativeAudio.AudioRecorder(RecordingPresets.HIGH_QUALITY);
       await recorderInstance.prepareToRecordAsync();
       recorderInstance.record();
 
@@ -43,6 +58,7 @@ export class ExpoAudioRecordingService implements IAudioRecordingService {
 
       return ok(undefined);
     } catch (error) {
+      await this.resetAudioMode();
       const message = error instanceof Error ? error.message : "Failed to start recording";
       return err(new AppError(message, "RECORDING_START_FAILED"));
     }
@@ -78,6 +94,8 @@ export class ExpoAudioRecordingService implements IAudioRecordingService {
       this.recorder = null;
       const message = error instanceof Error ? error.message : "Failed to stop recording";
       return err(new AppError(message, "RECORDING_STOP_FAILED"));
+    } finally {
+      await this.resetAudioMode();
     }
   }
 
@@ -94,6 +112,8 @@ export class ExpoAudioRecordingService implements IAudioRecordingService {
       this.recorder = null;
       const message = error instanceof Error ? error.message : "Failed to cancel recording";
       return err(new AppError(message, "RECORDING_CANCEL_FAILED"));
+    } finally {
+      await this.resetAudioMode();
     }
   }
 

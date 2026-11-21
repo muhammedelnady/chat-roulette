@@ -3,36 +3,40 @@
  * RFC4122 v4 UUID generator
  */
 
-import * as Crypto from "expo-crypto";
+function bytesToUuid(bytes: Uint8Array): string {
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+function getWebCrypto(): Partial<Crypto> | undefined {
+  return globalThis.crypto;
+}
 
 export function generateUUID(): string {
-  try {
-    if (typeof Crypto.randomUUID === "function") {
-      const result = Crypto.randomUUID();
-      if (typeof result === "string" && result.length > 0) {
-        return result;
-      }
-    }
-  } catch {}
-
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  const webCrypto = getWebCrypto();
+  if (typeof webCrypto?.randomUUID === "function") {
     try {
-      const result = crypto.randomUUID();
+      const result = webCrypto.randomUUID();
       if (typeof result === "string" && result.length > 0) {
         return result;
       }
     } catch {}
   }
 
-  const template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
-  const numRandomBytes = (template.match(/[xy]/g) ?? []).length;
-  const randomBytes = Crypto.getRandomBytes(numRandomBytes);
+  if (typeof webCrypto?.getRandomValues === "function") {
+    try {
+      const bytes = new Uint8Array(16);
+      webCrypto.getRandomValues(bytes);
+      return bytesToUuid(bytes);
+    } catch {}
+  }
 
-  let i = 0;
-  return template.replace(/[xy]/g, (c) => {
-    const randomByte = randomBytes[i++] ?? 0;
-    const r = randomByte % 16;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  const fallbackBytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i += 1) {
+    fallbackBytes[i] = Math.floor(Math.random() * 256);
+  }
+  return bytesToUuid(fallbackBytes);
 }

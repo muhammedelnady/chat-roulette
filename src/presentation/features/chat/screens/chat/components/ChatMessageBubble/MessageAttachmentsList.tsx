@@ -3,12 +3,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
-import { Text } from "@/src/presentation/components/atoms";
+import { AnimatedPressable, Text } from "@/src/presentation/components/atoms";
 import { useUI } from "@/src/presentation/hooks";
 
 import type { ChatAttachmentEntity } from "../../../../shared/types";
+import { isPreviewableImageUrl, resolveSafeMediaUrl } from "../../../../shared/utils/urlValidator";
 
 import { CHAT_MESSAGE_BUBBLE_TEST_IDS } from "./ChatMessageBubble.constants";
 import { styles } from "./ChatMessageBubble.styles";
@@ -22,14 +23,7 @@ export interface MessageAttachmentsListProps {
 }
 
 export function resolveAttachmentUrl(url: string): string {
-  if (!url) return "";
-  if (url.startsWith("/")) {
-    const baseUrl = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000")
-      .replace(/\/api\/v1$/, "")
-      .replace(/\/$/, "");
-    return `${baseUrl}${url}`;
-  }
-  return url;
+  return resolveSafeMediaUrl(url, { allowLocal: true });
 }
 
 export const MessageAttachmentsList = memo<MessageAttachmentsListProps>(
@@ -78,48 +72,64 @@ export const MessageAttachmentsList = memo<MessageAttachmentsListProps>(
             );
           }
 
-          const mime = att.mimeType || "";
-          const resolvedUrl = resolveAttachmentUrl(attUrl);
-          const isImg =
-            mime.startsWith("image/") ||
-            (resolvedUrl && /\.(jpg|jpeg|png|webp|gif)/i.test(resolvedUrl));
+          const resolvedUrl = resolveSafeMediaUrl(attUrl, { allowLocal: isOwn });
+          const isImg = Boolean(resolvedUrl && isPreviewableImageUrl(resolvedUrl, att.mimeType));
 
           if (isImg) {
             return (
-              <Pressable
+              <AnimatedPressable
                 key={itemKey}
                 testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.ATTACHMENT_IMAGE}
+                accessibilityRole="button"
+                accessibilityLabel={att.fileName || t("chat.openAttachment")}
+                scaleTo={0.98}
                 onPress={() => onPressAttachment(att)}
-                style={({ pressed }) => [styles.imageWrapper, pressed && { opacity: 0.85 }]}
+                style={[styles.imageWrapper, { borderColor: colors.borderSubtle }]}
               >
                 {resolvedUrl ? (
                   <Image
                     source={{ uri: resolvedUrl }}
+                    recyclingKey={resolvedUrl}
                     style={styles.attachmentImage}
                     contentFit="cover"
                     transition={150}
                   />
                 ) : null}
-              </Pressable>
+              </AnimatedPressable>
             );
           }
 
+          const sizeLabel =
+            att.fileSize > 0 ? `${Math.max(1, Math.round(att.fileSize / 1024))} KB` : "";
+
           return (
-            <Pressable
+            <AnimatedPressable
               key={itemKey}
               testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.ATTACHMENT_FILE}
+              accessibilityRole="button"
+              accessibilityLabel={att.fileName || t("chat.openAttachment")}
+              scaleTo={0.98}
               onPress={() => onPressAttachment(att)}
-              style={({ pressed }) => [
+              style={[
                 styles.fileCard,
-                { backgroundColor: colors.primaryTint },
-                pressed && { opacity: 0.85 },
+                {
+                  backgroundColor: isOwn ? colors.primaryTint : colors.surfaceElevated,
+                  borderColor: colors.borderSubtle,
+                },
               ]}
             >
-              <Ionicons
-                name="document-text-outline"
-                size={20}
-                color={isOwn ? colors.textOnPrimary : colors.primary}
-              />
+              <View
+                style={[
+                  styles.fileIconMedallion,
+                  { backgroundColor: isOwn ? colors.primaryTint2 : colors.primaryTint },
+                ]}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={18}
+                  color={isOwn ? colors.textOnPrimary : colors.primary}
+                />
+              </View>
               <View style={styles.fileInfo}>
                 <Text
                   variant="xs"
@@ -127,17 +137,17 @@ export const MessageAttachmentsList = memo<MessageAttachmentsListProps>(
                   numberOfLines={1}
                   weight="medium"
                 >
-                  {att.fileName || "Attachment"}
+                  {att.fileName || t("chat.attachmentDefaultName")}
                 </Text>
                 <Text
                   variant="xs"
                   color={isOwn ? colors.textOnPrimary : colors.textSecondary}
                   style={styles.fileSizeText}
                 >
-                  {att.fileSize ? `${Math.round(att.fileSize / 1024)} KB` : ""}
+                  {sizeLabel}
                 </Text>
               </View>
-            </Pressable>
+            </AnimatedPressable>
           );
         })}
       </View>

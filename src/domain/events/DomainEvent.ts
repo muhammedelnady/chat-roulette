@@ -3,19 +3,17 @@
  * Domain Event
  */
 
+import { generateUUID } from "@/src/domain/utils/uuid";
+
 export abstract class DomainEvent {
   readonly id: string;
   readonly occurredOn: Date;
   readonly eventType: string;
 
-  constructor() {
-    this.id = this.generateId();
+  constructor(eventType: string) {
+    this.id = generateUUID();
     this.occurredOn = new Date();
-    this.eventType = this.constructor.name;
-  }
-
-  private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    this.eventType = eventType;
   }
 
   abstract toPayload(): Record<string, unknown>;

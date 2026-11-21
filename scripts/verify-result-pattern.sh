@@ -12,13 +12,13 @@ else
   echo "✅ PASS: No throw statements in use cases"
 fi
 
-THROWS_REPO=$(grep -rn "\bthrow\b" src/data/repositories --include="*.ts" | grep -v "__tests__" | grep -v ".test.ts" || true)
+THROWS_REPO=$(grep -rn "\bthrow\b" src/data/repositories src/data/simulated --include="*.ts" | grep -v "__tests__" | grep -v ".test.ts" || true)
 if [ -n "$THROWS_REPO" ]; then
-  echo "❌ FAIL: Throw statements in repositories:"
+  echo "❌ FAIL: Throw statements in repositories or simulated adapters:"
   echo "$THROWS_REPO"
   ERRORS=$((ERRORS + 1))
 else
-  echo "✅ PASS: No throw statements in repositories"
+  echo "✅ PASS: No throw statements in repositories or simulated adapters"
 fi
 
 if [ $ERRORS -gt 0 ]; then

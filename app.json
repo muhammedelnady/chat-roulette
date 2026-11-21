@@ -15,7 +15,8 @@
         "NSPhotoLibraryUsageDescription": "Chat Roulette needs access to your photo library to share images in rooms.",
         "NSCameraUsageDescription": "Chat Roulette needs access to your camera to capture photos for chat rooms.",
         "NSMicrophoneUsageDescription": "Chat Roulette needs access to your microphone to record voice notes.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CADisableMinimumFrameDurationOnPhone": true
       }
     },
     "android": {

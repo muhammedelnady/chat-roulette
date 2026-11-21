@@ -57,8 +57,16 @@ export interface ColorTokens {
   readonly gray100: string;
   readonly shell: string;
   readonly ownBubble: string;
+  readonly ownBubbleEnd: string;
   readonly cyanGlow: string;
   readonly cyanTint: string;
+  readonly surfaceGlass: string;
+  readonly surfaceHighlight: string;
+  readonly borderSubtle: string;
+  readonly borderGlow: string;
+  readonly accentTint: string;
+  readonly accentBorder: string;
+  readonly shadowGlow: string;
 }
 
 export type ColorKey = keyof ColorTokens;
@@ -165,6 +173,8 @@ export interface ShadowTokens {
   readonly md: ShadowStyle;
   readonly lg: ShadowStyle;
   readonly xl: ShadowStyle;
+  readonly glowPrimary: ShadowStyle;
+  readonly glowAccent: ShadowStyle;
 }
 
 export type ShadowKey = keyof ShadowTokens;

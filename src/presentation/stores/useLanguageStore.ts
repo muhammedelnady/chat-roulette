@@ -5,13 +5,12 @@ import * as Localization from "expo-localization";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { eventModule } from "@/src/di/modules/eventModule";
-import { LanguageChangedEvent } from "@/src/domain/events";
 import { directionFromLangTag } from "@/src/infrastructure/i18n/direction";
 import { resolveLangCode } from "@/src/infrastructure/i18n/resolve-lang";
 import { zustandMMKVStorage } from "@/src/infrastructure/storage/ZustandMMKVAdapter";
 import { useDirectionStore } from "@stores/useDirectionStore";
 
+import { devtoolsConfig } from "./utils/devtools";
 import { readPersistedField } from "./utils/persistedState";
 
 const LANG_KEY = "chat_roulette_language_preference";
@@ -53,9 +52,6 @@ export const useLanguageStore = create<LanguageState>()(
           const desiredTag = (savedTag || get().languageTag || "en").toLowerCase();
 
           set({ languageTag: desiredTag, isInitialized: true }, false, "initializeLanguage_setTag");
-          void eventModule
-            .getEventBus()
-            .publish(new LanguageChangedEvent(resolveLangCode(desiredTag)));
 
           const expectedDir = directionFromLangTag(desiredTag);
           if (useDirectionStore.getState().direction !== expectedDir) {
@@ -66,18 +62,7 @@ export const useLanguageStore = create<LanguageState>()(
         setLanguageTag: async (tag: string) => {
           const normalized = (tag || "en").toLowerCase();
           set({ languageTag: normalized }, false, "setLanguageTag");
-          void eventModule
-            .getEventBus()
-            .publish(new LanguageChangedEvent(resolveLangCode(normalized)));
           await useDirectionStore.getState().setDirection(directionFromLangTag(normalized));
-
-          try {
-            const stateToPersist = JSON.stringify({
-              state: { languageTag: normalized },
-              version: 0,
-            });
-            await zustandMMKVStorage.setItem(LANG_KEY + "_v1", stateToPersist);
-          } catch {}
         },
 
         toggleLanguage: () => {
@@ -101,6 +86,6 @@ export const useLanguageStore = create<LanguageState>()(
         },
       }
     ),
-    { name: "LanguageStore" }
+    devtoolsConfig("LanguageStore")
   )
 );

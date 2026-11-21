@@ -8,12 +8,16 @@ import type {
   StagedAttachment,
 } from "../../../shared/types";
 
+export interface SendMessageOptions {
+  readonly includeStagedAttachments?: boolean;
+}
+
 export interface ChatViewModel {
   readonly conversation: ChatConversationEntity | null;
-  readonly messages: ChatMessageEntity[];
+  readonly messages: readonly ChatMessageEntity[];
   readonly inputText: string;
-  readonly stagedAttachments: StagedAttachment[];
-  readonly typingUsers: string[];
+  readonly stagedAttachments: readonly StagedAttachment[];
+  readonly typingUsers: readonly string[];
   readonly isLoading: boolean;
   readonly isSending: boolean;
   readonly isError: boolean;
@@ -25,16 +29,16 @@ export interface ChatViewModel {
   readonly isNetworkOnline: boolean;
   readonly outboundQueueCount: number;
   readonly setInputText: (text: string) => void;
-  readonly sendMessage: (content: string) => Promise<void> | void;
+  readonly sendMessage: (content: string, options?: SendMessageOptions) => Promise<void> | void;
   readonly handleRetryMessage: (message: ChatMessageEntity) => Promise<void> | void;
   readonly sendAudioNote: (audioData: {
-    uri: string;
-    duration: number;
-    name?: string;
-    type?: string;
+    readonly uri: string;
+    readonly duration: number;
+    readonly name?: string;
+    readonly type?: string;
   }) => Promise<void>;
   readonly pickAttachment: () => Promise<void>;
-  readonly removeStagedAttachment: (uri: string) => void;
+  readonly removeStagedAttachment: (idOrUri: string) => void;
   readonly deleteAttachment: (attachmentId: string, messageId?: string) => Promise<void>;
   readonly toggleReaction: (messageId: string, emoji: string) => Promise<void> | void;
   readonly toggleOfflineMode: () => void;

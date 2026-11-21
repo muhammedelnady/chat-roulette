@@ -7,13 +7,13 @@ export interface ChatInputBarProps {
   readonly onChangeText: (text: string) => void;
   readonly onSend: (content: string) => void;
   readonly onSendAudioNote?: (audioData: {
-    uri: string;
-    duration: number;
-    name?: string;
-    type?: string;
+    readonly uri: string;
+    readonly duration: number;
+    readonly name?: string;
+    readonly type?: string;
   }) => Promise<void>;
   readonly onPickAttachment?: () => void;
-  readonly onRemoveStagedAttachment?: (uri: string) => void;
+  readonly onRemoveStagedAttachment?: (idOrUri: string) => void;
   readonly stagedAttachments?: readonly StagedAttachment[];
   readonly isSending?: boolean;
   readonly disabled?: boolean;

@@ -1,6 +1,6 @@
 /** @format */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useUseCases } from "@/src/di/UseCasesProvider";
 
@@ -8,15 +8,31 @@ import { CHAT_CONSTANTS } from "../../../../shared/constants";
 
 export function useChatInput(conversationId: string | null) {
   const { getChatSocketService } = useUseCases();
-  const [inputText, setInputText] = useState("");
+  const [draft, setDraft] = useState<{
+    readonly convId: string | null;
+    readonly text: string;
+  }>({ convId: conversationId, text: "" });
+  const inputText = draft.convId === conversationId ? draft.text : "";
+
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const stopTypingNow = useCallback(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    if (isTypingRef.current && conversationId) {
+      isTypingRef.current = false;
+      getChatSocketService.stopTyping(conversationId);
+    }
+  }, [conversationId, getChatSocketService]);
+
   const handleTextChange = useCallback(
     (text: string) => {
-      setInputText(text);
+      setDraft({ convId: conversationId, text });
 
-      if (text.length > 0) {
+      if (text.trim().length > 0) {
         if (!isTypingRef.current && conversationId) {
           isTypingRef.current = true;
           getChatSocketService.startTyping(conversationId);
@@ -27,35 +43,35 @@ export function useChatInput(conversationId: string | null) {
         }
 
         typingTimeoutRef.current = setTimeout(() => {
+          typingTimeoutRef.current = null;
           if (isTypingRef.current && conversationId) {
             isTypingRef.current = false;
             getChatSocketService.stopTyping(conversationId);
           }
         }, CHAT_CONSTANTS.TYPING_DEBOUNCE_MS);
       } else {
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
-        if (isTypingRef.current && conversationId) {
-          isTypingRef.current = false;
-          getChatSocketService.stopTyping(conversationId);
-        }
+        stopTypingNow();
       }
     },
-    [conversationId, getChatSocketService]
+    [conversationId, getChatSocketService, stopTypingNow]
   );
 
   const clearInput = useCallback(() => {
-    setInputText("");
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-  }, []);
+    setDraft({ convId: conversationId, text: "" });
+    stopTypingNow();
+  }, [conversationId, stopTypingNow]);
+
+  useEffect(() => {
+    return () => {
+      stopTypingNow();
+    };
+  }, [conversationId, stopTypingNow]);
 
   return {
     inputText,
     setInputText: handleTextChange,
     isTypingRef,
+    stopTypingNow,
     clearInput,
   };
 }

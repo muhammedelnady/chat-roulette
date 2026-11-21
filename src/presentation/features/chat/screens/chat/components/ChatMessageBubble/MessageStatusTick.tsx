@@ -28,6 +28,7 @@ export const MessageStatusTick = memo<MessageStatusTickProps>(
       return (
         <Ionicons
           testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.STATUS_TICK}
+          accessibilityLabel={t("chat.statusFailed")}
           name="alert-circle"
           size={14}
           color={colors.error}
@@ -44,6 +45,7 @@ export const MessageStatusTick = memo<MessageStatusTickProps>(
       return (
         <Ionicons
           testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.STATUS_TICK}
+          accessibilityLabel={t("chat.statusRead")}
           name="checkmark-done"
           size={14}
           color={colors.accent}
@@ -56,6 +58,7 @@ export const MessageStatusTick = memo<MessageStatusTickProps>(
       return (
         <Ionicons
           testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.STATUS_TICK}
+          accessibilityLabel={t("chat.statusDelivered")}
           name="checkmark-done"
           size={14}
           color={colors.textOnPrimary}
@@ -68,6 +71,7 @@ export const MessageStatusTick = memo<MessageStatusTickProps>(
       return (
         <Ionicons
           testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.STATUS_TICK}
+          accessibilityLabel={t("chat.statusSent")}
           name="checkmark"
           size={14}
           color={colors.textOnPrimary}

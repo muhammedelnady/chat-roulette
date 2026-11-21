@@ -38,7 +38,12 @@ export function unwrap<T, E>(result: Result<T, E> | undefined | null): T {
     throw new Error("Cannot unwrap undefined or null Result");
   }
   if (isErr(result)) {
-    throw new Error(`Cannot unwrap error Result: ${String(result.error)}`);
+    const detail = result.error instanceof Error ? result.error.message : String(result.error);
+    const wrapped = new Error(`Cannot unwrap error Result: ${detail}`);
+    if (result.error instanceof Error) {
+      Object.assign(wrapped, { cause: result.error });
+    }
+    throw wrapped;
   }
   return result.value;
 }
@@ -57,10 +62,10 @@ export function map<T, U, E>(result: Result<T, E>, fn: (value: T) => U): Result<
   return result;
 }
 
-export function flatMap<T, U, E>(
+export function flatMap<T, U, E, E2 = E>(
   result: Result<T, E>,
-  fn: (value: T) => Result<U, E>
-): Result<U, E> {
+  fn: (value: T) => Result<U, E2>
+): Result<U, E | E2> {
   if (isOk(result)) {
     return fn(result.value);
   }

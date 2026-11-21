@@ -12,3 +12,14 @@ export async function readPersistedField(key: string, field: string): Promise<un
     return undefined;
   }
 }
+
+export async function writePersistedState(
+  key: string,
+  state: Record<string, unknown>,
+  version = 0
+): Promise<void> {
+  try {
+    const serialized = JSON.stringify({ state, version });
+    await zustandMMKVStorage.setItem(key, serialized);
+  } catch {}
+}

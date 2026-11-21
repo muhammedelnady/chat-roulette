@@ -2,7 +2,7 @@
 
 import * as SplashScreen from "expo-splash-screen";
 
-import { initStorage } from "@/src/data/cache/mmkvStorage";
+import { initStorage } from "@/src/infrastructure/storage/mmkvStorage";
 
 let bootstrapped = false;
 
@@ -12,6 +12,10 @@ export function bootstrapApp(): void {
   }
   bootstrapped = true;
 
-  void SplashScreen.preventAutoHideAsync();
-  void initStorage();
+  void SplashScreen.preventAutoHideAsync().catch(() => {});
+  void initStorage().catch(() => {});
+}
+
+export async function ensureStorageInitialized(): Promise<void> {
+  await initStorage();
 }

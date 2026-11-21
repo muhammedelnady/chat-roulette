@@ -60,7 +60,7 @@ export const Text = memo<TextProps>(
           typography.fontSize[variant] * getLineHeightMultiplier(variant, typography.lineHeight),
         color: resolvedColor,
         writingDirection: direction as TextStyle["writingDirection"],
-        textAlign: centered ? "center" : "auto",
+        textAlign: centered ? "center" : direction === "rtl" ? "right" : "left",
       };
     }, [
       color,

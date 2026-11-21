@@ -1,9 +1,9 @@
 /** @format */
 /**
- * Domain Cache Envelope Entity
+ * Data Cache Envelope
  */
 
-export interface CacheEnvelopeEntity<T> {
+export interface CacheEnvelope<T> {
   readonly version: number;
   readonly cachedAt: number;
   readonly ttlMs: number;

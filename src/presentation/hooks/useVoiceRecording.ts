@@ -31,6 +31,9 @@ export const useVoiceRecording = (): UseVoiceRecordingResult => {
   const [durationMs, setDurationMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isRecordingRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -40,49 +43,79 @@ export const useVoiceRecording = (): UseVoiceRecordingResult => {
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       clearTimer();
+      if (isRecordingRef.current) {
+        isRecordingRef.current = false;
+        void cancelVoiceRecordingUseCase.execute();
+      }
     };
-  }, [clearTimer]);
+  }, [cancelVoiceRecordingUseCase, clearTimer]);
 
   const startRecording = useCallback(async (): Promise<boolean> => {
-    setError(null);
-    setDurationMs(0);
+    if (inFlightRef.current || isRecordingRef.current) return false;
+    inFlightRef.current = true;
+    try {
+      setError(null);
+      setDurationMs(0);
 
-    const result = await startVoiceRecordingUseCase.execute();
-    if (isErr(result)) {
-      setError(result.error.message);
-      return false;
+      const result = await startVoiceRecordingUseCase.execute();
+      if (!isMountedRef.current) {
+        if (isOk(result)) {
+          void cancelVoiceRecordingUseCase.execute();
+        }
+        return false;
+      }
+      if (isErr(result)) {
+        setError(result.error.message);
+        return false;
+      }
+
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      const startTimestamp = Date.now();
+      clearTimer();
+      timerRef.current = setInterval(() => {
+        setDurationMs(Date.now() - startTimestamp);
+      }, 200);
+
+      return true;
+    } finally {
+      inFlightRef.current = false;
     }
-
-    setIsRecording(true);
-    const startTimestamp = Date.now();
-    clearTimer();
-    timerRef.current = setInterval(() => {
-      setDurationMs(Date.now() - startTimestamp);
-    }, 200);
-
-    return true;
-  }, [clearTimer, startVoiceRecordingUseCase]);
+  }, [cancelVoiceRecordingUseCase, clearTimer, startVoiceRecordingUseCase]);
 
   const stopRecording = useCallback(async (): Promise<VoiceNote | null> => {
+    if (inFlightRef.current || !isRecordingRef.current) return null;
+    inFlightRef.current = true;
     clearTimer();
+    isRecordingRef.current = false;
     setIsRecording(false);
 
-    const result = await stopVoiceRecordingUseCase.execute();
-    if (isErr(result)) {
-      setError(result.error.message);
-      return null;
-    }
+    try {
+      const result = await stopVoiceRecordingUseCase.execute();
+      if (!isMountedRef.current) return null;
+      if (isErr(result)) {
+        setError(result.error.message);
+        return null;
+      }
 
-    setDurationMs(0);
-    return isOk(result) ? result.value : null;
+      setDurationMs(0);
+      return isOk(result) ? result.value : null;
+    } finally {
+      inFlightRef.current = false;
+    }
   }, [clearTimer, stopVoiceRecordingUseCase]);
 
   const cancelRecording = useCallback(async (): Promise<void> => {
     clearTimer();
-    setIsRecording(false);
-    setDurationMs(0);
+    isRecordingRef.current = false;
+    if (isMountedRef.current) {
+      setIsRecording(false);
+      setDurationMs(0);
+    }
 
     await cancelVoiceRecordingUseCase.execute();
   }, [clearTimer, cancelVoiceRecordingUseCase]);

@@ -5,20 +5,25 @@ import { StyleSheet } from "react-native";
 
 import { View } from "@/src/presentation/components/atoms";
 import { useUI } from "@presentation/hooks";
-import { getScreenWidth } from "@presentation/utils/dimensions";
 
 export interface ContentContainerProps extends ViewProps {
   readonly children: React.ReactNode;
+  readonly fullBleed?: boolean;
 }
 
-export function ContentContainer({ children, style, ...props }: ContentContainerProps) {
+export function ContentContainer({
+  children,
+  fullBleed = false,
+  style,
+  ...props
+}: ContentContainerProps) {
   const { spacing } = useUI();
   return (
     <View
       style={[
         styles.container,
         {
-          width: getScreenWidth() - spacing[16],
+          paddingHorizontal: fullBleed ? 0 : spacing[14],
         },
         style,
       ]}
@@ -32,6 +37,8 @@ export function ContentContainer({ children, style, ...props }: ContentContainer
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
+    maxWidth: 720,
     alignSelf: "center",
   },
 });

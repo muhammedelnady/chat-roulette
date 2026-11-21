@@ -27,6 +27,33 @@ export const getColors = (mode: ThemeMode): ColorTokens =>
 export { borderRadius } from "./border-radius";
 export { colors, commonColors, darkColors, gradients, lightColors, primitives } from "./colors";
 export { darkShadows, lightShadows, shadows } from "./shadows";
+export {
+  CSS_EASE_IN_OUT,
+  CSS_EASE_OUT,
+  EASE_IN_OUT,
+  EASE_OUT,
+  EASE_SHEET,
+  FADE_DOWN_ENTER,
+  FADE_DOWN_EXIT,
+  FADE_ENTER,
+  FADE_EXIT,
+  FADE_UP_ENTER,
+  FADE_UP_EXIT,
+  LIST_ITEM_REFLOW,
+  MATCH_REVEAL_ENTER,
+  MATCH_REVEAL_EXIT,
+  MATCH_STAGGER_1,
+  MATCH_STAGGER_2,
+  MATCH_STAGGER_3,
+  MOTION_DURATION,
+  MOTION_SPRING,
+  projectVelocity,
+  REACTION_CAPSULE_ENTER,
+  REACTION_CAPSULE_EXIT,
+  rubberband,
+  SOFT_POP_ENTER,
+  SOFT_POP_EXIT,
+} from "./motion";
 export { spacing } from "./spacing";
 export {
   COMPONENT_HEIGHTS,

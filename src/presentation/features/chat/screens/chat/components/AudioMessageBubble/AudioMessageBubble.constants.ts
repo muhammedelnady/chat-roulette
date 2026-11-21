@@ -10,4 +10,6 @@ export const AUDIO_MESSAGE_BUBBLE_TEST_IDS = {
   TOTAL_DURATION: "audio-total-duration",
 } as const;
 
-export const DEFAULT_WAVEFORM_BARS = [0.25, 0.6, 0.85, 0.45, 0.9, 0.7, 0.5, 0.8, 0.4, 0.65, 0.3];
+export const DEFAULT_WAVEFORM_BARS: readonly number[] = [
+  0.25, 0.6, 0.85, 0.45, 0.9, 0.7, 0.5, 0.8, 0.4, 0.65, 0.3,
+] as const;

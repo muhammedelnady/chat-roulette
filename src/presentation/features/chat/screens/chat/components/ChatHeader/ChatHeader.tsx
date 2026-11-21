@@ -1,15 +1,19 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo } from "react";
-import { Pressable, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { memo, useCallback } from "react";
+import { View } from "react-native";
 
-import { Text } from "@/src/presentation/components/atoms";
-import { useUI } from "@/src/presentation/hooks";
+import { AnimatedPressable, PulseDot, Text } from "@/src/presentation/components/atoms";
+import { useHaptics, useScreenFocused, useUI } from "@/src/presentation/hooks";
+import { gradients, MOTION_DURATION } from "@/src/presentation/theme";
 
 import { CHAT_HEADER_TEST_IDS } from "./ChatHeader.constants";
 import { styles } from "./ChatHeader.styles";
 import type { ChatHeaderProps } from "./ChatHeader.types";
+
+const NETWORK_CHIP_TRANSITION = ["transform", "opacity", "backgroundColor", "borderColor"] as const;
 
 export const ChatHeader = memo<ChatHeaderProps>(
   ({
@@ -21,35 +25,44 @@ export const ChatHeader = memo<ChatHeaderProps>(
     onToggleOffline,
     testID = CHAT_HEADER_TEST_IDS.ROOT,
   }) => {
-    const { colors, t, isRTL } = useUI();
+    const { colors, shadows, t, isRTL } = useUI();
+    const haptics = useHaptics();
+    const isScreenActive = useScreenFocused();
 
     const displayTitle = title ?? t("chat.title");
     const displaySubtitle =
       subtitle ?? (isOnline ? t("chat.supportOnline") : t("chat.supportOffline"));
+
+    const handleNetworkToggle = useCallback(() => {
+      void haptics.selection();
+      onToggleOffline?.();
+    }, [haptics, onToggleOffline]);
 
     return (
       <View
         testID={testID}
         style={[
           styles.container,
+          shadows.sm,
           {
             backgroundColor: colors.surface,
-            borderBottomColor: colors.border,
-            flexDirection: isRTL ? "row-reverse" : "row",
+            borderBottomColor: colors.borderSubtle,
           },
         ]}
       >
         {onBackPress ? (
-          <Pressable
+          <AnimatedPressable
             testID={CHAT_HEADER_TEST_IDS.BACK_BUTTON}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.back")}
+            scaleTo={0.95}
             onPress={onBackPress}
-            style={({ pressed }) => [
+            style={[
               styles.backButton,
               {
                 backgroundColor: colors.surfaceElevated,
-                borderColor: colors.borderStrong,
+                borderColor: colors.border,
               },
-              pressed && { opacity: 0.7 },
             ]}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -58,23 +71,32 @@ export const ChatHeader = memo<ChatHeaderProps>(
               size={20}
               color={colors.textPrimary}
             />
-          </Pressable>
+          </AnimatedPressable>
         ) : null}
 
-        <View
-          style={[
-            styles.avatarBadge,
-            {
-              backgroundColor: isRouletteMatch ? colors.cyanTint : colors.primaryTint,
-              borderColor: isRouletteMatch ? colors.accent : colors.primary,
-            },
-          ]}
-        >
-          <Ionicons
-            name={isRouletteMatch ? "sparkles" : "planet-outline"}
-            size={18}
-            color={isRouletteMatch ? colors.accent : colors.primary}
-          />
+        <View style={styles.avatarWrapper}>
+          {isRouletteMatch ? (
+            <LinearGradient
+              colors={gradients.radarGlow}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.avatarGradient}
+            >
+              <Ionicons name="sparkles" size={18} color={colors.textOnPrimary} />
+            </LinearGradient>
+          ) : (
+            <View
+              style={[
+                styles.avatarBadge,
+                {
+                  backgroundColor: colors.primaryTint,
+                  borderColor: colors.borderGlow,
+                },
+              ]}
+            >
+              <Ionicons name="planet-outline" size={19} color={colors.primary} />
+            </View>
+          )}
           <View
             testID={CHAT_HEADER_TEST_IDS.PRESENCE_DOT}
             style={[
@@ -97,28 +119,43 @@ export const ChatHeader = memo<ChatHeaderProps>(
           >
             {displayTitle}
           </Text>
-          <Text
-            testID={CHAT_HEADER_TEST_IDS.STATUS}
-            variant="xs"
-            color={isOnline ? colors.accent : colors.warning}
-            numberOfLines={1}
-          >
-            {displaySubtitle}
-          </Text>
+          <View style={styles.statusRow}>
+            <PulseDot
+              color={isOnline ? colors.success : colors.warning}
+              size={6}
+              haloSize={10}
+              active={isOnline && isScreenActive}
+            />
+            <Text
+              testID={CHAT_HEADER_TEST_IDS.STATUS}
+              variant="xs"
+              weight="medium"
+              color={isOnline ? colors.accent : colors.warning}
+              numberOfLines={1}
+              style={styles.statusText}
+            >
+              {displaySubtitle}
+            </Text>
+          </View>
         </View>
 
         {onToggleOffline ? (
-          <Pressable
+          <AnimatedPressable
             testID={CHAT_HEADER_TEST_IDS.NETWORK_TOGGLE}
-            onPress={onToggleOffline}
-            style={({ pressed }) => [
+            accessibilityRole="button"
+            accessibilityLabel={t("chat.toggleOfflineMode")}
+            accessibilityState={{ selected: !isOnline }}
+            scaleTo={0.95}
+            hitSlop={8}
+            transitionProperties={NETWORK_CHIP_TRANSITION}
+            transitionDurationMs={MOTION_DURATION.fast}
+            onPress={handleNetworkToggle}
+            style={[
               styles.networkChip,
               {
                 backgroundColor: isOnline ? colors.successTint : colors.warningTint,
                 borderColor: isOnline ? colors.successBorder : colors.warningBorder,
-                flexDirection: isRTL ? "row-reverse" : "row",
               },
-              pressed && { opacity: 0.75 },
             ]}
           >
             <View
@@ -130,7 +167,7 @@ export const ChatHeader = memo<ChatHeaderProps>(
             <Text variant="xs" weight="bold" color={isOnline ? colors.success : colors.warning}>
               {isOnline ? t("rooms.onlineMode") : t("rooms.offlineMode")}
             </Text>
-          </Pressable>
+          </AnimatedPressable>
         ) : null}
       </View>
     );

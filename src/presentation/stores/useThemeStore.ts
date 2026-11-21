@@ -7,6 +7,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { zustandMMKVStorage } from "@/src/infrastructure/storage/ZustandMMKVAdapter";
 
+import { devtoolsConfig } from "./utils/devtools";
 import { readPersistedField } from "./utils/persistedState";
 
 const THEME_KEY = "chat_roulette_theme_preference";
@@ -45,8 +46,6 @@ export const useThemeStore = create<ThemeState>()(
 
         setTheme: (theme) => {
           set({ theme }, false, "setTheme");
-          const stateToPersist = JSON.stringify({ state: { theme }, version: 0 });
-          void zustandMMKVStorage.setItem(THEME_KEY + "_v1", stateToPersist);
         },
 
         toggleTheme: () => {
@@ -68,6 +67,6 @@ export const useThemeStore = create<ThemeState>()(
         },
       }
     ),
-    { name: "ThemeStore" }
+    devtoolsConfig("ThemeStore")
   )
 );

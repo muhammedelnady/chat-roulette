@@ -19,32 +19,22 @@ export enum ErrorCategory {
 }
 
 export abstract class DomainError extends Error {
-  public category: ErrorCategory = ErrorCategory.UNKNOWN;
-  public code: string;
+  public readonly category: ErrorCategory;
+  public readonly code: string;
   public readonly details?: Record<string, unknown>;
 
-  constructor(message: string, code: string, details?: Record<string, unknown>) {
+  constructor(
+    message: string,
+    code: string,
+    category: ErrorCategory = ErrorCategory.UNKNOWN,
+    details?: Record<string, unknown>,
+    errorName = "DomainError"
+  ) {
     super(message);
     this.code = code;
+    this.category = category;
     this.details = details;
-    this.name = this.constructor.name;
+    this.name = errorName;
     Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
-
-export class ValidationError extends DomainError {
-  public readonly field?: string;
-
-  constructor(message: string, field?: string, details?: Record<string, unknown>) {
-    super(message, "VALIDATION_ERROR", details);
-    this.category = ErrorCategory.VALIDATION;
-    this.field = field;
-  }
-}
-
-export class NotFoundError extends DomainError {
-  constructor(resource: string, details?: Record<string, unknown>) {
-    super(`${resource} not found`, "NOT_FOUND", details);
-    this.category = ErrorCategory.NOT_FOUND;
   }
 }

@@ -1,7 +1,7 @@
 /** @format */
 
 import { StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { type Edge, SafeAreaView } from "react-native-safe-area-context";
 
 import { View } from "@/src/presentation/components/atoms";
 import { KeyboardDismissArea } from "@/src/presentation/components/molecules";
@@ -11,16 +11,31 @@ import { ContentContainer } from "./ContentContainer";
 
 export interface PageLayoutProps {
   readonly children: React.ReactNode;
+  readonly fullBleed?: boolean;
+  readonly edges?: readonly Edge[];
+  readonly dismissKeyboardOnDrag?: boolean;
   readonly testID?: string;
 }
 
-export function PageLayout({ children, testID }: PageLayoutProps) {
+const DEFAULT_EDGES: readonly Edge[] = ["top", "left", "right", "bottom"];
+
+export function PageLayout({
+  children,
+  fullBleed = false,
+  edges = DEFAULT_EDGES,
+  dismissKeyboardOnDrag = true,
+  testID,
+}: PageLayoutProps) {
+  const inner = (
+    <ContentContainer fullBleed={fullBleed} style={styles.contentContainer}>
+      {children}
+    </ContentContainer>
+  );
+
   return (
     <View testID={testID} style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardDismissArea>
-          <ContentContainer style={styles.contentContainer}>{children}</ContentContainer>
-        </KeyboardDismissArea>
+      <SafeAreaView edges={edges} style={styles.safeArea}>
+        {dismissKeyboardOnDrag ? <KeyboardDismissArea>{inner}</KeyboardDismissArea> : inner}
       </SafeAreaView>
     </View>
   );

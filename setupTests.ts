@@ -1,12 +1,34 @@
-import { notifyManager } from "@tanstack/react-query";
 import type React from "react";
 import { Text as mockRNText } from "react-native";
 import "react-native-gesture-handler/jestSetup";
 
-jest.mock("@react-native-async-storage/async-storage", () =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-return
-  require("@react-native-async-storage/async-storage/jest/async-storage-mock")
-);
+jest.mock("@react-native-async-storage/async-storage", () => {
+  const store = new Map<string, string>();
+  const mock = {
+    getItem: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+    setItem: jest.fn((key: string, value: string) => {
+      store.set(key, value);
+      return Promise.resolve();
+    }),
+    removeItem: jest.fn((key: string) => {
+      store.delete(key);
+      return Promise.resolve();
+    }),
+    clear: jest.fn(() => {
+      store.clear();
+      return Promise.resolve();
+    }),
+    getAllKeys: jest.fn(() => Promise.resolve(Array.from(store.keys()))),
+    multiGet: jest.fn((keys: readonly string[]) =>
+      Promise.resolve(keys.map((k) => [k, store.get(k) ?? null] as [string, string | null]))
+    ),
+    multiRemove: jest.fn((keys: readonly string[]) => {
+      keys.forEach((k) => store.delete(k));
+      return Promise.resolve();
+    }),
+  };
+  return { __esModule: true, default: mock, ...mock };
+});
 
 jest.mock("react-native-gesture-handler/src/v3/detectors/useEnsureGestureHandlerRootView", () => ({
   useEnsureGestureHandlerRootView: () => undefined,
@@ -18,13 +40,6 @@ jest.mock(
     useEnsureGestureHandlerRootView: () => undefined,
   })
 );
-
-notifyManager.setBatchNotifyFunction((callback) => {
-  callback();
-});
-notifyManager.setScheduler((callback) => {
-  callback();
-});
 
 jest.mock("@infrastructure/logging/logger", () => {
   const createMockLogger = (): Record<string, jest.Mock> => {
@@ -55,7 +70,6 @@ process.env["EXPO_PUBLIC_CHAT_MODE"] = "simulated";
 process.env["EXPO_PUBLIC_API_URL"] = "https://api.example.com";
 process.env["EXPO_PUBLIC_ENV"] = "development";
 process.env["EXPO_PUBLIC_APP_SCHEME"] = "chatroulette";
-process.env["EXPO_PUBLIC_MMKV_ENCRYPTION_KEY"] = "test_showcase_mmkv_key_32_characters";
 process.env["EXPO_OS"] = "ios";
 
 jest.mock("@expo/vector-icons", () => ({
@@ -65,15 +79,44 @@ jest.mock("@expo/vector-icons", () => ({
   Feather: "Feather",
 }));
 
+jest.mock("react-native-safe-area-context", () => {
+  const ReactActual = jest.requireActual<typeof React>("react");
+  const insets = { top: 44, bottom: 34, left: 0, right: 0 };
+  const frame = { x: 0, y: 0, width: 390, height: 844 };
+  const SafeAreaInsetsContext = ReactActual.createContext(insets);
+  const SafeAreaFrameContext = ReactActual.createContext(frame);
+  return {
+    SafeAreaInsetsContext,
+    SafeAreaFrameContext,
+    initialWindowMetrics: { insets, frame },
+    SafeAreaProvider: ({ children }: { children?: React.ReactNode }) =>
+      ReactActual.createElement(
+        SafeAreaInsetsContext.Provider,
+        { value: insets },
+        ReactActual.createElement(SafeAreaFrameContext.Provider, { value: frame }, children)
+      ),
+    SafeAreaView: ({ children, ...rest }: { children?: React.ReactNode; [k: string]: unknown }) =>
+      ReactActual.createElement("View", rest, children),
+    useSafeAreaInsets: () => insets,
+    useSafeAreaFrame: () => frame,
+  };
+});
+
 jest.mock("react-native-logs", () => ({
   logger: {
-    createLogger: jest.fn().mockReturnValue({
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      silly: jest.fn(),
-      setSeverity: jest.fn(),
+    createLogger: jest.fn(() => {
+      let currentSeverity = "debug";
+      return {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        silly: jest.fn(),
+        setSeverity: jest.fn((level: string) => {
+          currentSeverity = level;
+        }),
+        getSeverity: jest.fn(() => currentSeverity),
+      };
     }),
   },
   consoleTransport: jest.fn(),
@@ -184,10 +227,13 @@ jest.mock("expo-router", () => {
       push: jest.fn(),
       replace: jest.fn(),
       back: jest.fn(),
+      canGoBack: jest.fn(() => true),
     }),
     useSegments: () => [],
     useLocalSearchParams: () => ({}),
-    useFocusEffect: (cb: () => void) => cb(),
+    useFocusEffect: (cb: () => void | (() => void)) => {
+      ReactActual.useEffect(cb, [cb]);
+    },
     Link: "Link",
     Redirect: ({ href }: { href: string }) =>
       ReactActual.createElement("View", {
@@ -223,9 +269,19 @@ jest.mock("expo-audio", () => {
     useAudioPlayer: jest.fn(() => ({
       play: jest.fn(),
       pause: jest.fn(),
+      seekTo: jest.fn().mockResolvedValue(undefined),
+      setPlaybackRate: jest.fn(),
       playing: false,
       currentTime: 0,
       duration: 0,
+    })),
+    useAudioPlayerStatus: jest.fn(() => ({
+      playing: false,
+      currentTime: 0,
+      duration: 0,
+      didJustFinish: false,
+      isBuffering: false,
+      isLoaded: true,
     })),
     useAudioRecorder: jest.fn(() => new (mockAudioRecorder as unknown as new () => unknown)()),
     useAudioRecorderState: jest.fn(() => ({ isRecording: false, duration: 0 })),
@@ -243,31 +299,14 @@ jest.mock("expo-audio", () => {
   };
 });
 
-jest.mock("expo-audio/build/AudioModule", () => {
-  const mockAudioRecorder = jest.fn().mockImplementation(() => ({
-    prepareToRecordAsync: jest.fn().mockResolvedValue(undefined),
-    record: jest.fn(),
-    stop: jest.fn().mockResolvedValue(undefined),
-  }));
-  (mockAudioRecorder as unknown as { prototype: Record<string, unknown> }).prototype = {
-    prepareToRecordAsync: jest.fn().mockResolvedValue(undefined),
-  };
-  return {
-    __esModule: true,
-    default: {
-      AudioRecorder: mockAudioRecorder,
-    },
-  };
-});
-
 jest.mock("react-native-worklets", () => ({
   runOnJS: <T>(fn: T) => fn,
   runOnUI: <T>(fn: T) => fn,
   scheduleOnUI: (fn: () => void) => {
     if (typeof fn === "function") fn();
   },
-  scheduleOnRN: (fn: () => void) => {
-    if (typeof fn === "function") fn();
+  scheduleOnRN: (fn: (...args: unknown[]) => void, ...args: unknown[]) => {
+    if (typeof fn === "function") fn(...args);
   },
   createWorklet: <T>(fn: T) => fn,
   makeShareable: <T>(val: T) => val,
@@ -295,6 +334,12 @@ jest.mock("expo-haptics", () => ({
     Error: "error",
   },
 }));
+
+type MockSharedValueUpdater<T> = T | ((prev: T) => T);
+
+function mockApplySharedValue<T>(current: T, next: MockSharedValueUpdater<T>): T {
+  return typeof next === "function" ? (next as (prev: T) => T)(current) : next;
+}
 
 jest.mock("react-native-reanimated", () => {
   const NOOP = () => undefined;
@@ -328,15 +373,45 @@ jest.mock("react-native-reanimated", () => {
     easing() {
       return this;
     }
+    reduceMotion() {
+      return this;
+    }
     build() {
       return () => ({ initialValues: {}, animations: {} });
     }
   }
 
+  class KeyframeMock {
+    constructor(_def?: unknown) {}
+    duration() {
+      return this;
+    }
+    delay() {
+      return this;
+    }
+    reduceMotion() {
+      return this;
+    }
+    withCallback() {
+      return this;
+    }
+  }
+
+  const ReduceMotion = {
+    System: "system",
+    Always: "always",
+    Never: "never",
+  };
+
   return {
     __esModule: true,
     reanimatedVersion: "4.x.x-mock",
     isSharedValue,
+    ReduceMotion,
+    ReducedMotionConfig: () => null,
+    useReducedMotion: jest.fn(() => false),
+    cubicBezier: () => "cubic-bezier",
+    Keyframe: KeyframeMock,
     default: {
       View: "Animated.View",
       Text: mockRNText,
@@ -347,21 +422,23 @@ jest.mock("react-native-reanimated", () => {
       isSharedValue,
     },
     useSharedValue: <T>(init: T) => {
-      const shared: { value: T; get: () => T; set: (v: T) => void } = {
+      const shared: { value: T; get: () => T; set: (v: MockSharedValueUpdater<T>) => void } = {
         value: init,
         get: () => shared.value,
-        set: (v: T) => {
-          shared.value = v;
+        set: (v: MockSharedValueUpdater<T>) => {
+          shared.value = mockApplySharedValue(shared.value, v);
         },
       };
       return shared;
     },
     useAnimatedStyle: ID,
+    useAnimatedReaction: NOOP,
     useDerivedValue: <T>(processor: () => T) => ({ value: processor() }),
     useAnimatedRef: () => ({ current: null }),
     useAnimatedScrollHandler: NOOP_FACTORY,
     useAnimatedProps: ID,
     cancelAnimation: NOOP,
+    withClamp: <T>(_config: unknown, anim: T) => anim,
     withDelay: <T>(_delayMs: number, nextAnimation: T) => nextAnimation,
     withRepeat: ID,
     withSequence: () => 0,
@@ -376,8 +453,10 @@ jest.mock("react-native-reanimated", () => {
     FadeInDown: new BaseAnimationMock(),
     FadeOutDown: new BaseAnimationMock(),
     FadeInUp: new BaseAnimationMock(),
+    FadeOutUp: new BaseAnimationMock(),
     FadeOut: new BaseAnimationMock(),
     ZoomIn: new BaseAnimationMock(),
+    ZoomOut: new BaseAnimationMock(),
     Layout: new BaseAnimationMock(),
     LinearTransition: new BaseAnimationMock(),
     Easing: {
@@ -386,6 +465,7 @@ jest.mock("react-native-reanimated", () => {
       inOut: ID,
       out: ID,
       in: ID,
+      bezier: () => ID,
     },
     runOnJS: ID,
     runOnUI: ID,

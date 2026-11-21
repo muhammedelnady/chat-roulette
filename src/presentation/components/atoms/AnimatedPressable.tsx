@@ -1,28 +1,34 @@
 /** @format */
 
-import { memo, type ReactNode, useCallback } from "react";
+import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import type {
   AccessibilityRole,
   AccessibilityState,
+  Insets,
   LayoutChangeEvent,
   StyleProp,
   ViewStyle,
 } from "react-native";
 import { Pressable } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { useReducedMotion } from "react-native-reanimated";
 
 import type { HapticFeedbackType } from "@/src/domain/services/HapticFeedbackType";
+import { CSS_EASE_OUT, MOTION_DURATION } from "@theme";
 
-const SPRING_CONFIG = { stiffness: 300, damping: 20 };
+type PressableTransitionProperty = "transform" | "opacity" | "backgroundColor" | "borderColor";
 
 export interface AnimatedPressableProps {
   readonly children?: ReactNode;
   readonly scaleTo?: number;
   readonly hapticType?: HapticFeedbackType | null;
   readonly onPress?: () => void;
+  readonly onLongPress?: () => void;
   readonly onHaptic?: (type: HapticFeedbackType) => Promise<void>;
   readonly disabled?: boolean;
-  readonly hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
+  readonly hitSlop?: number | Insets;
+  readonly pressRetentionOffset?: number | Insets;
+  readonly transitionProperties?: readonly PressableTransitionProperty[];
+  readonly transitionDurationMs?: number;
   readonly style?: StyleProp<ViewStyle>;
   readonly accessibilityRole?: AccessibilityRole;
   readonly accessibilityState?: AccessibilityState;
@@ -33,15 +39,21 @@ export interface AnimatedPressableProps {
   readonly containerStyle?: StyleProp<ViewStyle>;
 }
 
+const DEFAULT_TRANSITION_PROPERTIES: PressableTransitionProperty[] = ["transform", "opacity"];
+
 export const AnimatedPressable = memo<AnimatedPressableProps>(
   ({
     children,
-    scaleTo = 0.96,
+    scaleTo = 0.97,
     hapticType,
     onPress,
+    onLongPress,
     onHaptic,
     disabled = false,
     hitSlop,
+    pressRetentionOffset = 16,
+    transitionProperties,
+    transitionDurationMs,
     style,
     containerStyle,
     accessibilityRole,
@@ -51,36 +63,47 @@ export const AnimatedPressable = memo<AnimatedPressableProps>(
     testID,
     onLayout,
   }) => {
-    const scaleSV = useSharedValue(1);
-    const opacitySV = useSharedValue(1);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scaleSV.value }],
-      opacity: opacitySV.value,
-    }));
+    const [pressed, setPressed] = useState(false);
+    const reducedMotion = useReducedMotion();
 
     const handlePressIn = useCallback(() => {
       if (disabled) return;
-      scaleSV.value = withSpring(scaleTo, SPRING_CONFIG);
-      opacitySV.value = withSpring(0.9, SPRING_CONFIG);
+      setPressed(true);
       if (hapticType && onHaptic) {
         void onHaptic(hapticType);
       }
-    }, [disabled, scaleTo, scaleSV, opacitySV, hapticType, onHaptic]);
+    }, [disabled, hapticType, onHaptic]);
 
     const handlePressOut = useCallback(() => {
-      if (disabled) return;
-      scaleSV.value = withSpring(1, SPRING_CONFIG);
-      opacitySV.value = withSpring(1, SPRING_CONFIG);
-    }, [disabled, scaleSV, opacitySV]);
+      setPressed(false);
+    }, []);
+
+    const isActivelyPressed = !disabled && pressed;
+    const targetScale = isActivelyPressed && !reducedMotion ? scaleTo : 1;
+    const targetOpacity = isActivelyPressed ? (reducedMotion ? 0.82 : 0.92) : 1;
+
+    const pressFeedbackStyle = useMemo(
+      () => ({
+        transitionProperty: transitionProperties
+          ? [...transitionProperties]
+          : DEFAULT_TRANSITION_PROPERTIES,
+        transitionDuration: transitionDurationMs ?? MOTION_DURATION.press,
+        transitionTimingFunction: CSS_EASE_OUT,
+        transform: [{ scale: targetScale }],
+        opacity: targetOpacity,
+      }),
+      [transitionProperties, transitionDurationMs, targetScale, targetOpacity]
+    );
 
     return (
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled}
         hitSlop={hitSlop}
+        pressRetentionOffset={pressRetentionOffset}
         accessibilityRole={accessibilityRole}
         accessibilityState={{ disabled, ...accessibilityState }}
         accessibilityLabel={accessibilityLabel}
@@ -89,7 +112,7 @@ export const AnimatedPressable = memo<AnimatedPressableProps>(
         onLayout={onLayout}
         style={containerStyle}
       >
-        <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
+        <Animated.View style={[style, pressFeedbackStyle]}>{children}</Animated.View>
       </Pressable>
     );
   }

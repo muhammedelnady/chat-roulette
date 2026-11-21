@@ -1,28 +1,32 @@
 /** @format */
 
 import type { MessageEntity } from "@/src/domain/entities";
-import { AppError } from "@/src/domain/errors";
+import { type AppError, ValidationError } from "@/src/domain/errors";
 import type { IMessageRepository } from "@/src/domain/repositories";
-import { err, isErr, ok, type Result } from "@/src/domain/Result";
+import { err, type Result } from "@/src/domain/Result";
+import { safeExecute } from "@/src/domain/usecases/safeExecute";
 
 export class ToggleMessageReactionUseCase {
-  constructor(private messageRepository: IMessageRepository) {}
+  constructor(private readonly messageRepository: IMessageRepository) {}
 
   async execute(
     conversationId: string,
     messageId: string,
     emoji: string
   ): Promise<Result<MessageEntity | null, AppError>> {
-    try {
-      const result = await this.messageRepository.toggleReaction(conversationId, messageId, emoji);
-      if (isErr(result)) return err(result.error);
-      return ok(result.value);
-    } catch (error) {
-      return err(
-        new AppError("Failed to toggle message reaction", "MESSAGE_REACTION_FAILED", {
-          originalError: error,
-        })
-      );
+    if (!conversationId.trim()) {
+      return err(new ValidationError("Conversation ID is required", "conversationId"));
     }
+    if (!messageId.trim()) {
+      return err(new ValidationError("Message ID is required", "messageId"));
+    }
+    if (!emoji.trim()) {
+      return err(new ValidationError("Reaction emoji is required", "emoji"));
+    }
+    return safeExecute(
+      () => this.messageRepository.toggleReaction(conversationId, messageId, emoji),
+      "Failed to toggle message reaction",
+      "MESSAGE_REACTION_FAILED"
+    );
   }
 }

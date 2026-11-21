@@ -1,11 +1,16 @@
 /** @format */
 
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react-native";
+
+import { UseCasesProvider } from "@/src/di/UseCasesProvider";
+import { useChatStore, useConnectivityStore } from "@/src/presentation/stores";
 
 import type { ChatConversationEntity } from "../../../shared/types";
 
 import { ChatRoomsContent } from "./ChatRoomsContent";
+import { CHAT_ROOMS_TEST_IDS } from "./ChatRoomsContent.constants";
 import type { ChatRoomsViewModel } from "./ChatRoomsContent.types";
+import { useChatRoomsViewModel } from "./ChatRoomsContent.viewmodel";
 
 const sampleRoom: ChatConversationEntity = {
   id: "room-rn-architecture",
@@ -29,6 +34,8 @@ describe("ChatRoomsContent", () => {
     selectedCategory: "ALL",
     searchQuery: "",
     isLoading: false,
+    isRefreshing: false,
+    error: null,
     isOnline: true,
     isDark: true,
     isRTL: false,
@@ -43,6 +50,15 @@ describe("ChatRoomsContent", () => {
     toggleLanguage: jest.fn(),
     refresh: jest.fn().mockResolvedValue(undefined),
     ...overrides,
+  });
+
+  beforeEach(() => {
+    useChatStore.getState().reset();
+    useConnectivityStore.setState({
+      isConnected: true,
+      isInternetReachable: true,
+      demoOfflineOverride: false,
+    });
   });
 
   it("renders rooms, roulette hero CTA, and showcase control toggles", async () => {
@@ -67,9 +83,75 @@ describe("ChatRoomsContent", () => {
     expect(vm.toggleLanguage).toHaveBeenCalledTimes(1);
   });
 
-  it("renders empty state when filtered rooms list is empty", async () => {
+  it("renders empty state, error retry UI, and search clear button", async () => {
     const vm = createViewModel({ rooms: [] });
-    await render(<ChatRoomsContent viewModel={vm} />);
-    expect(screen.getByTestId("chat-rooms-empty-state")).toBeTruthy();
+    const { unmount } = await render(<ChatRoomsContent viewModel={vm} />);
+    expect(screen.getByTestId(CHAT_ROOMS_TEST_IDS.EMPTY_STATE)).toBeTruthy();
+    await unmount();
+
+    const refresh = jest.fn().mockResolvedValue(undefined);
+    const setSearchQuery = jest.fn();
+    const errVm = createViewModel({
+      rooms: [],
+      searchQuery: "expo",
+      error: "Failed to load rooms",
+      refresh,
+      setSearchQuery,
+    });
+    await render(<ChatRoomsContent viewModel={errVm} />);
+    expect(screen.getByTestId(CHAT_ROOMS_TEST_IDS.ERROR_STATE)).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId(CHAT_ROOMS_TEST_IDS.RETRY_BUTTON));
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByTestId(CHAT_ROOMS_TEST_IDS.CLEAR_SEARCH_BUTTON));
+    expect(setSearchQuery).toHaveBeenCalledWith("");
+  });
+
+  it("renders ChatRoomsContent container and filters rooms in useChatRoomsViewModel", async () => {
+    const { unmount: unmountView } = await render(<ChatRoomsContent />, {
+      wrapper: UseCasesProvider,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-rooms-content")).toBeTruthy();
+    });
+    await unmountView();
+
+    const { result, unmount } = await renderHook(() => useChatRoomsViewModel(), {
+      wrapper: UseCasesProvider,
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.rooms.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      result.current.setSelectedCategory("TECH");
+    });
+    expect(result.current.rooms.every((r) => r.category === "TECH")).toBe(true);
+
+    await act(async () => {
+      result.current.setSelectedCategory("ALL");
+      result.current.setSearchQuery("expo");
+    });
+    expect(result.current.rooms.length).toBeGreaterThanOrEqual(1);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.isRefreshing).toBe(false);
+
+    await act(async () => {
+      result.current.toggleOfflineMode();
+    });
+    expect(result.current.isOnline).toBe(false);
+    await act(async () => {
+      result.current.toggleOfflineMode();
+    });
+    expect(result.current.isOnline).toBe(true);
+
+    await unmount();
   });
 });

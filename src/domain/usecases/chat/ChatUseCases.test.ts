@@ -1,7 +1,7 @@
 /** @format */
 
 import type { ConversationEntity, MessageEntity } from "@/src/domain/entities";
-import { AppError } from "@/src/domain/errors";
+import { AppError, NetworkError, ValidationError } from "@/src/domain/errors";
 import type { IConversationRepository, IMessageRepository } from "@/src/domain/repositories";
 import { err, isErr, isOk, ok } from "@/src/domain/Result";
 import {
@@ -66,7 +66,8 @@ describe("Chat Use Cases", () => {
 
   it("executes conversation use cases and handles repository failures", async () => {
     convRepo.list.mockResolvedValueOnce(ok({ data: [sampleConv], nextCursor: null }));
-    const listRes = await new GetConversationsUseCase(convRepo).execute();
+    const listRes = await new GetConversationsUseCase(convRepo).execute("cur-1", 15);
+    expect(convRepo.list).toHaveBeenCalledWith("cur-1", 15);
     expect(isOk(listRes) && listRes.value.data).toHaveLength(1);
 
     convRepo.list.mockRejectedValueOnce(new Error("boom"));
@@ -83,6 +84,7 @@ describe("Chat Use Cases", () => {
 
     convRepo.matchRoulette.mockResolvedValueOnce(ok(sampleConv));
     expect(isOk(await new MatchRouletteUseCase(convRepo).execute("React Native"))).toBe(true);
+    expect(convRepo.matchRoulette).toHaveBeenCalledWith("React Native");
 
     convRepo.close.mockResolvedValueOnce(err(new AppError("cannot close")));
     expect(isErr(await new CloseConversationUseCase(convRepo).execute("conv-1"))).toBe(true);
@@ -90,7 +92,8 @@ describe("Chat Use Cases", () => {
 
   it("executes message and media use cases", async () => {
     msgRepo.list.mockResolvedValueOnce(ok({ data: [sampleMsg], nextCursor: null }));
-    const msgsRes = await new GetMessagesUseCase(msgRepo).execute("conv-1");
+    const msgsRes = await new GetMessagesUseCase(msgRepo).execute("conv-1", "cur-1", 20);
+    expect(msgRepo.list).toHaveBeenCalledWith("conv-1", "cur-1", 20);
     expect(isOk(msgsRes) && msgsRes.value.data[0]?.id).toBe("msg-1");
 
     msgRepo.send.mockResolvedValueOnce(ok(sampleMsg));
@@ -134,5 +137,43 @@ describe("Chat Use Cases", () => {
 
     msgRepo.deleteAttachment.mockResolvedValueOnce(ok(undefined));
     expect(isOk(await new DeleteAttachmentUseCase(msgRepo).execute("att-1"))).toBe(true);
+  });
+
+  it("rejects blank inputs with ValidationError and preserves repository Result errors", async () => {
+    const emptyConvId = await new GetConversationByIdUseCase(convRepo).execute("   ");
+    expect(isErr(emptyConvId) && emptyConvId.error).toBeInstanceOf(ValidationError);
+
+    const emptyCloseId = await new CloseConversationUseCase(convRepo).execute("");
+    expect(isErr(emptyCloseId) && emptyCloseId.error).toBeInstanceOf(ValidationError);
+
+    const emptyMsgs = await new GetMessagesUseCase(msgRepo).execute("  ");
+    expect(isErr(emptyMsgs) && emptyMsgs.error).toBeInstanceOf(ValidationError);
+
+    const emptySend = await new SendMessageUseCase(msgRepo).execute({
+      conversationId: "",
+      content: "Hi",
+    });
+    expect(isErr(emptySend) && emptySend.error).toBeInstanceOf(ValidationError);
+
+    const emptyMarkRead = await new MarkMessageReadUseCase(msgRepo).execute("conv-1", "");
+    expect(isErr(emptyMarkRead) && emptyMarkRead.error).toBeInstanceOf(ValidationError);
+
+    const emptyReaction = await new ToggleMessageReactionUseCase(msgRepo).execute(
+      "conv-1",
+      "msg-1",
+      "  "
+    );
+    expect(isErr(emptyReaction) && emptyReaction.error).toBeInstanceOf(ValidationError);
+
+    const emptyDel = await new DeleteAttachmentUseCase(msgRepo).execute("");
+    expect(isErr(emptyDel) && emptyDel.error).toBeInstanceOf(ValidationError);
+
+    msgRepo.send.mockResolvedValueOnce(err(new NetworkError("offline")));
+    const propRes = await new SendMessageUseCase(msgRepo).execute({
+      conversationId: "conv-1",
+      content: "Hi",
+    });
+    expect(isErr(propRes) && propRes.error).toBeInstanceOf(NetworkError);
+    expect(convRepo.getById).not.toHaveBeenCalled();
   });
 });

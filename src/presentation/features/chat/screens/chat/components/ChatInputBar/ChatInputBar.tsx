@@ -1,16 +1,32 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback } from "react";
-import { ActivityIndicator, Alert, Pressable, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { memo, useCallback, useRef, useState } from "react";
+import { ActivityIndicator, Alert, TextInput, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { useUI, useVoiceRecording } from "@/src/presentation/hooks";
+import { AnimatedPressable } from "@/src/presentation/components/atoms";
+import { useHaptics, useUI, useVoiceRecording } from "@/src/presentation/hooks";
+import {
+  CSS_EASE_OUT,
+  gradients,
+  MOTION_DURATION,
+  SOFT_POP_ENTER,
+  SOFT_POP_EXIT,
+} from "@/src/presentation/theme";
+
+import { CHAT_CONSTANTS } from "../../../../shared/constants";
+import type { StagedAttachment } from "../../../../shared/types";
 
 import { AudioRecordingTray } from "./AudioRecordingTray";
 import { CHAT_INPUT_BAR_TEST_IDS } from "./ChatInputBar.constants";
 import { styles } from "./ChatInputBar.styles";
 import type { ChatInputBarProps } from "./ChatInputBar.types";
 import { StagedAttachmentsTray } from "./StagedAttachmentsTray";
+
+const SEND_BUTTON_TRANSITION = ["transform", "opacity", "backgroundColor", "borderColor"] as const;
+const EMPTY_STAGED_ATTACHMENTS: readonly StagedAttachment[] = [];
 
 export const ChatInputBar = memo<ChatInputBarProps>(
   ({
@@ -20,13 +36,17 @@ export const ChatInputBar = memo<ChatInputBarProps>(
     onSendAudioNote,
     onPickAttachment,
     onRemoveStagedAttachment,
-    stagedAttachments = [],
+    stagedAttachments = EMPTY_STAGED_ATTACHMENTS,
     isSending = false,
     disabled = false,
     placeholder,
     testID = CHAT_INPUT_BAR_TEST_IDS.ROOT,
   }) => {
-    const { colors, t, isRTL } = useUI();
+    const { colors, shadows, t, isRTL } = useUI();
+    const haptics = useHaptics();
+    const [isFocused, setIsFocused] = useState(false);
+    const recordingLockRef = useRef(false);
+
     const {
       isRecording,
       formattedTime,
@@ -37,48 +57,70 @@ export const ChatInputBar = memo<ChatInputBarProps>(
     } = useVoiceRecording();
 
     const handleStartRecording = useCallback(async () => {
-      if (!onSendAudioNote || disabled || isSending) return;
-      const started = await startRecording();
-      if (!started) {
-        Alert.alert(t("chat.micPermissionDenied"));
+      if (!onSendAudioNote || disabled || isSending || recordingLockRef.current) return;
+      recordingLockRef.current = true;
+      try {
+        const started = await startRecording();
+        if (!started) {
+          Alert.alert(t("chat.micPermissionDenied"));
+        }
+      } finally {
+        recordingLockRef.current = false;
       }
     }, [onSendAudioNote, disabled, isSending, startRecording, t]);
 
     const handleCancelRecording = useCallback(() => {
+      void haptics.selection();
       void cancelRecording();
-    }, [cancelRecording]);
+    }, [cancelRecording, haptics]);
 
     const handleSendRecording = useCallback(async () => {
-      if (durationMs < 1000) {
-        Alert.alert(t("chat.recordingTooShort"));
-        await cancelRecording();
-        return;
-      }
-      const voiceNote = await stopRecording();
-      if (!voiceNote) return;
+      if (recordingLockRef.current) return;
+      recordingLockRef.current = true;
+      try {
+        if (durationMs < 1000) {
+          Alert.alert(t("chat.recordingTooShort"));
+          await cancelRecording();
+          return;
+        }
+        void haptics.light();
+        const voiceNote = await stopRecording();
+        if (!voiceNote) return;
 
-      void onSendAudioNote?.({
-        uri: voiceNote.uri,
-        duration: Math.round(voiceNote.durationMs / 1000),
-        name: `voice_${voiceNote.createdAt}.m4a`,
-        type: voiceNote.mimeType,
-      });
-    }, [durationMs, stopRecording, cancelRecording, onSendAudioNote, t]);
+        await onSendAudioNote?.({
+          uri: voiceNote.uri,
+          duration: Math.round(voiceNote.durationMs / 1000),
+          name: `voice_${voiceNote.createdAt}.m4a`,
+          type: voiceNote.mimeType,
+        });
+      } finally {
+        recordingLockRef.current = false;
+      }
+    }, [durationMs, stopRecording, cancelRecording, onSendAudioNote, haptics, t]);
 
     const handleMicPress = useCallback(() => {
+      void haptics.light();
       void handleStartRecording();
-    }, [handleStartRecording]);
+    }, [handleStartRecording, haptics]);
+
+    const handleSendRecordingPress = useCallback(() => {
+      void handleSendRecording();
+    }, [handleSendRecording]);
+
+    const handleFocus = useCallback(() => setIsFocused(true), []);
+    const handleBlur = useCallback(() => setIsFocused(false), []);
 
     const hasUploading = stagedAttachments.some((att) => att.isUploading);
     const hasText = inputText.trim().length > 0;
     const hasAttachments = stagedAttachments.length > 0;
     const canSend = (hasText || hasAttachments) && !hasUploading && !isSending && !disabled;
-    const showMicButton = !hasText && !hasAttachments && Boolean(onSendAudioNote);
+    const showMicButton = !hasText && !hasAttachments && Boolean(onSendAudioNote) && !disabled;
 
     const handleSendPress = useCallback(() => {
       if (!canSend) return;
+      void haptics.light();
       onSend(inputText.trim());
-    }, [canSend, inputText, onSend]);
+    }, [canSend, haptics, inputText, onSend]);
 
     return (
       <View
@@ -87,7 +129,7 @@ export const ChatInputBar = memo<ChatInputBarProps>(
           styles.container,
           {
             backgroundColor: colors.surface,
-            borderTopColor: colors.border,
+            borderTopColor: colors.borderSubtle,
           },
         ]}
       >
@@ -97,111 +139,135 @@ export const ChatInputBar = memo<ChatInputBarProps>(
           onRemoveStagedAttachment={onRemoveStagedAttachment}
         />
 
-        <View style={[styles.inputRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
+        <View style={styles.inputRow}>
           {isRecording ? (
             <AudioRecordingTray
               formattedRecordingTime={formattedTime}
               onCancelRecording={handleCancelRecording}
-              onSendRecording={() => {
-                void handleSendRecording();
-              }}
+              onSendRecording={handleSendRecordingPress}
               colors={colors}
-              isRTL={isRTL}
+              shadows={shadows}
               t={t}
             />
           ) : (
             <>
               {onPickAttachment ? (
-                <Pressable
+                <AnimatedPressable
                   testID={CHAT_INPUT_BAR_TEST_IDS.ATTACH_BUTTON}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("chat.attachImage")}
+                  scaleTo={0.95}
                   onPress={onPickAttachment}
                   disabled={disabled || isSending}
-                  style={({ pressed }) => [
+                  style={[
                     styles.attachButton,
                     {
                       backgroundColor: colors.surfaceElevated,
-                      borderColor: colors.borderStrong,
-                      [isRTL ? "marginLeft" : "marginRight"]: 8,
+                      borderColor: colors.border,
+                      opacity: disabled || isSending ? 0.45 : 1,
                     },
-                    pressed && { opacity: 0.7 },
                   ]}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Ionicons name="attach-outline" size={20} color={colors.accent} />
-                </Pressable>
+                </AnimatedPressable>
               ) : null}
 
-              <View
+              <Animated.View
                 style={[
                   styles.inputWrapper,
                   {
                     backgroundColor: colors.inputBackground,
-                    borderColor: colors.borderStrong,
+                    borderColor: isFocused ? colors.borderFocused : colors.border,
+                    transitionProperty: "borderColor",
+                    transitionDuration: MOTION_DURATION.micro,
+                    transitionTimingFunction: CSS_EASE_OUT,
                   },
                 ]}
               >
                 <TextInput
                   testID={CHAT_INPUT_BAR_TEST_IDS.INPUT}
+                  accessibilityLabel={t("chat.inputPlaceholder")}
                   value={inputText}
                   onChangeText={onChangeText}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
                   placeholder={placeholder ?? t("chat.inputPlaceholder")}
                   placeholderTextColor={colors.textPlaceholder}
                   editable={!disabled && !isSending}
                   multiline
-                  maxLength={2000}
+                  maxLength={CHAT_CONSTANTS.MAX_INPUT_LENGTH}
                   style={[
                     styles.input,
                     {
                       color: colors.textPrimary,
                       textAlign: isRTL ? "right" : "left",
+                      writingDirection: isRTL ? "rtl" : "ltr",
                     },
                   ]}
                 />
-              </View>
+              </Animated.View>
 
               {showMicButton ? (
-                <Pressable
-                  testID={CHAT_INPUT_BAR_TEST_IDS.RECORD_BUTTON}
-                  accessibilityLabel={t("chat.recordVoiceNote")}
-                  onPress={handleMicPress}
-                  disabled={disabled || isSending}
-                  style={({ pressed }) => [
-                    styles.sendButton,
-                    {
-                      backgroundColor: colors.primary,
-                      [isRTL ? "marginRight" : "marginLeft"]: 8,
-                    },
-                    pressed && { opacity: 0.75 },
-                  ]}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="mic-outline" size={20} color={colors.textOnPrimary} />
-                </Pressable>
+                <Animated.View key="mic-action" entering={SOFT_POP_ENTER} exiting={SOFT_POP_EXIT}>
+                  <AnimatedPressable
+                    testID={CHAT_INPUT_BAR_TEST_IDS.RECORD_BUTTON}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("chat.recordVoiceNote")}
+                    scaleTo={0.95}
+                    onPress={handleMicPress}
+                    disabled={isSending}
+                    style={[styles.sendButton, shadows.glowPrimary]}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <LinearGradient
+                      colors={gradients.primary}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.gradientActionFill}
+                    >
+                      <Ionicons name="mic-outline" size={20} color={colors.textOnPrimary} />
+                    </LinearGradient>
+                  </AnimatedPressable>
+                </Animated.View>
               ) : (
-                <Pressable
-                  testID={CHAT_INPUT_BAR_TEST_IDS.SEND_BUTTON}
-                  onPress={handleSendPress}
-                  disabled={!canSend}
-                  style={({ pressed }) => [
-                    styles.sendButton,
-                    {
-                      backgroundColor: canSend ? colors.primary : colors.surfaceElevated,
-                      [isRTL ? "marginRight" : "marginLeft"]: 8,
-                    },
-                    pressed && { opacity: 0.75 },
-                  ]}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isSending ? (
-                    <ActivityIndicator size="small" color={colors.textOnPrimary} />
-                  ) : (
-                    <Ionicons
-                      name={isRTL ? "arrow-back" : "arrow-up"}
-                      size={20}
-                      color={canSend ? colors.textOnPrimary : colors.textSecondary}
-                    />
-                  )}
-                </Pressable>
+                <Animated.View key="send-action" entering={SOFT_POP_ENTER} exiting={SOFT_POP_EXIT}>
+                  <AnimatedPressable
+                    testID={CHAT_INPUT_BAR_TEST_IDS.SEND_BUTTON}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("chat.sendMessageAction")}
+                    scaleTo={0.95}
+                    transitionProperties={SEND_BUTTON_TRANSITION}
+                    transitionDurationMs={MOTION_DURATION.micro}
+                    onPress={handleSendPress}
+                    disabled={!canSend}
+                    style={[
+                      styles.sendButton,
+                      canSend ? shadows.glowPrimary : null,
+                      {
+                        backgroundColor: canSend ? "transparent" : colors.surfaceElevated,
+                        borderWidth: canSend ? 0 : 1,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {canSend ? (
+                      <LinearGradient
+                        colors={gradients.primary}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.gradientActionFill}
+                      >
+                        <Ionicons name="arrow-up" size={20} color={colors.textOnPrimary} />
+                      </LinearGradient>
+                    ) : isSending ? (
+                      <ActivityIndicator size="small" color={colors.textSecondary} />
+                    ) : (
+                      <Ionicons name="arrow-up" size={20} color={colors.textMuted} />
+                    )}
+                  </AnimatedPressable>
+                </Animated.View>
               )}
             </>
           )}

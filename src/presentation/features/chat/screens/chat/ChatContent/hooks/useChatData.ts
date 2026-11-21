@@ -1,6 +1,6 @@
 /** @format */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 import { useUseCases } from "@/src/di/UseCasesProvider";
@@ -12,15 +12,32 @@ import type { ChatConversationEntity } from "../../../../shared/types";
 
 import { bindChatSocketEvents } from "./useChatSocketHandlers";
 
+const EMPTY_TYPING_USERS: readonly string[] = [];
+
 export function useChatData(conversationId: string | null) {
-  const { getGetMessagesUseCase, getGetConversationByIdUseCase, getChatSocketService } =
-    useUseCases();
-  const [conversation, setConversation] = useState<ChatConversationEntity | null>(null);
+  const {
+    getGetMessagesUseCase,
+    getGetConversationByIdUseCase,
+    getMarkMessageReadUseCase,
+    getChatSocketService,
+  } = useUseCases();
+  const [conversationState, setConversationState] = useState<{
+    readonly convId: string | null;
+    readonly data: ChatConversationEntity | null;
+  }>({ convId: conversationId, data: null });
+  const conversation = conversationState.convId === conversationId ? conversationState.data : null;
+  const requestSeqRef = useRef(0);
+  const isFetchingMoreRef = useRef(false);
+  const activeConversationIdRef = useRef(conversationId);
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   const {
-    messages,
-    nextCursors,
-    typingUsers,
+    conversationMessages,
+    myNextCursor,
+    myTypingUsers,
     isLoadingMessages,
     error,
     supportPresence,
@@ -41,9 +58,11 @@ export function useChatData(conversationId: string | null) {
     setOutboundQueueCount,
   } = useChatStore(
     useShallow((state) => ({
-      messages: state.messages,
-      nextCursors: state.nextCursors,
-      typingUsers: state.typingUsers,
+      conversationMessages: conversationId ? state.messages[conversationId] : undefined,
+      myNextCursor: conversationId ? (state.nextCursors[conversationId] ?? null) : null,
+      myTypingUsers: conversationId
+        ? (state.typingUsers[conversationId] ?? EMPTY_TYPING_USERS)
+        : EMPTY_TYPING_USERS,
       isLoadingMessages: state.isLoadingMessages,
       error: state.error,
       supportPresence: state.supportPresence,
@@ -66,50 +85,67 @@ export function useChatData(conversationId: string | null) {
   );
 
   const invertedMessages = useMemo(() => {
-    if (!conversationId) return [];
-    const list = messages[conversationId] ?? [];
-    return [...list].sort(
-      (a, b) => (new Date(b.createdAt).getTime() || 0) - (new Date(a.createdAt).getTime() || 0)
-    );
-  }, [messages, conversationId]);
-
-  const myNextCursor = conversationId ? (nextCursors[conversationId] ?? null) : null;
-  const myTypingUsers = conversationId ? (typingUsers[conversationId] ?? []) : [];
+    if (!conversationId || !conversationMessages) return [];
+    return [...conversationMessages].reverse();
+  }, [conversationMessages, conversationId]);
 
   const fetchData = useCallback(async () => {
     if (!conversationId) return;
+    const reqSeq = ++requestSeqRef.current;
     setIsLoadingMessages(true);
     setError(null);
 
-    const [convResult, msgResult] = await Promise.all([
-      getGetConversationByIdUseCase.execute(conversationId),
-      getGetMessagesUseCase.execute(conversationId),
-    ]);
+    try {
+      const [convResult, msgResult] = await Promise.all([
+        getGetConversationByIdUseCase.execute(conversationId),
+        getGetMessagesUseCase.execute(conversationId),
+      ]);
 
-    if (isErr(convResult)) {
-      log.error("Failed to fetch conversation:", convResult.error);
-    } else if (convResult.value) {
-      setConversation(convResult.value);
-    }
+      if (reqSeq !== requestSeqRef.current || activeConversationIdRef.current !== conversationId) {
+        return;
+      }
 
-    if (isErr(msgResult)) {
-      log.error("Failed to fetch messages:", msgResult.error);
-      setError(msgResult.error.message);
-    } else {
-      setMessages(conversationId, msgResult.value.data, msgResult.value.nextCursor);
-      const lastAgentMsg = [...msgResult.value.data].reverse().find((m) => m.senderType !== "USER");
-      if (lastAgentMsg?.id) {
-        getChatSocketService.markMessageRead(conversationId, lastAgentMsg.id);
+      if (isErr(convResult)) {
+        log.error("Failed to fetch conversation:", convResult.error);
+      } else {
+        setConversationState({ convId: conversationId, data: convResult.value });
+      }
+
+      if (isErr(msgResult)) {
+        log.error("Failed to fetch messages:", msgResult.error);
+        setError(msgResult.error.message);
+      } else {
+        setMessages(conversationId, msgResult.value.data, msgResult.value.nextCursor);
+        let newestAgentMsg = null as (typeof msgResult.value.data)[number] | null;
+        let newestTs = -Infinity;
+        for (const msg of msgResult.value.data) {
+          if (msg.senderType === "USER" || !msg.id) continue;
+          const ts = Date.parse(msg.createdAt) || 0;
+          if (ts >= newestTs) {
+            newestTs = ts;
+            newestAgentMsg = msg;
+          }
+        }
+        if (newestAgentMsg?.id) {
+          if (getChatSocketService.isConnected()) {
+            getChatSocketService.markMessageRead(conversationId, newestAgentMsg.id);
+          } else {
+            void getMarkMessageReadUseCase.execute(conversationId, newestAgentMsg.id);
+          }
+        }
+      }
+    } finally {
+      if (reqSeq === requestSeqRef.current && activeConversationIdRef.current === conversationId) {
+        setOutboundQueueCount(getChatSocketService.getPendingQueueCount?.() ?? 0);
+        setIsLoadingMessages(false);
       }
     }
-
-    setOutboundQueueCount(getChatSocketService.getPendingQueueCount?.() ?? 0);
-    setIsLoadingMessages(false);
   }, [
     conversationId,
     getChatSocketService,
     getGetConversationByIdUseCase,
     getGetMessagesUseCase,
+    getMarkMessageReadUseCase,
     setError,
     setIsLoadingMessages,
     setMessages,
@@ -132,7 +168,9 @@ export function useChatData(conversationId: string | null) {
     }
 
     if (!getChatSocketService.isConnected()) {
-      void getChatSocketService.connect();
+      void Promise.resolve(getChatSocketService.connect()).catch((err: unknown) => {
+        log.warn("Failed to connect chat socket:", err);
+      });
     }
     getChatSocketService.joinConversation(conversationId);
 
@@ -150,12 +188,15 @@ export function useChatData(conversationId: string | null) {
         setSupportPresence,
       },
       () => {
-        void fetchData();
+        if (active) {
+          void fetchData();
+        }
       }
     );
 
     return () => {
       active = false;
+      requestSeqRef.current += 1;
       setCurrentConversationId(null);
       getChatSocketService.leaveConversation(conversationId);
       unbind();
@@ -176,15 +217,26 @@ export function useChatData(conversationId: string | null) {
   ]);
 
   const loadMore = useCallback(() => {
-    if (conversationId && myNextCursor && !isLoadingMessages) {
-      setIsLoadingMessages(true);
-      void getGetMessagesUseCase.execute(conversationId, myNextCursor).then((result) => {
-        if (!isErr(result)) {
-          appendMessages(conversationId, result.value.data, result.value.nextCursor);
-        }
-        setIsLoadingMessages(false);
-      });
+    if (!conversationId || !myNextCursor || isLoadingMessages || isFetchingMoreRef.current) {
+      return;
     }
+    isFetchingMoreRef.current = true;
+    setIsLoadingMessages(true);
+    const targetConvId = conversationId;
+    void getGetMessagesUseCase
+      .execute(targetConvId, myNextCursor)
+      .then((result) => {
+        if (activeConversationIdRef.current !== targetConvId) return;
+        if (!isErr(result)) {
+          appendMessages(targetConvId, result.value.data, result.value.nextCursor);
+        }
+      })
+      .finally(() => {
+        isFetchingMoreRef.current = false;
+        if (activeConversationIdRef.current === targetConvId) {
+          setIsLoadingMessages(false);
+        }
+      });
   }, [
     myNextCursor,
     isLoadingMessages,
@@ -199,7 +251,7 @@ export function useChatData(conversationId: string | null) {
     invertedMessages,
     isLoadingMessages,
     error,
-    myTypingUsers,
+    myTypingUsers: [...myTypingUsers],
     supportPresence,
     queueStatuses,
     outboundQueueCount,

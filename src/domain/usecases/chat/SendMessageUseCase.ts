@@ -5,12 +5,13 @@ import type {
   MessageAttachmentInput,
   MessageEntity,
 } from "@/src/domain/entities";
-import { AppError } from "@/src/domain/errors";
+import { type AppError, ValidationError } from "@/src/domain/errors";
 import type { IMessageRepository } from "@/src/domain/repositories";
-import { err, isErr, ok, type Result } from "@/src/domain/Result";
+import { err, type Result } from "@/src/domain/Result";
+import { safeExecute } from "@/src/domain/usecases/safeExecute";
 
 export class SendMessageUseCase {
-  constructor(private messageRepository: IMessageRepository) {}
+  constructor(private readonly messageRepository: IMessageRepository) {}
 
   async execute(params: {
     conversationId: string;
@@ -21,14 +22,18 @@ export class SendMessageUseCase {
     replyToId?: string;
     attachments?: (MessageAttachmentEntity | MessageAttachmentInput)[];
   }): Promise<Result<MessageEntity, AppError>> {
-    try {
-      const result = await this.messageRepository.send(params);
-      if (isErr(result)) return err(result.error);
-      return ok(result.value);
-    } catch (error) {
-      return err(
-        new AppError("Failed to send message", "MESSAGE_SEND_FAILED", { originalError: error })
-      );
+    if (!params.conversationId.trim()) {
+      return err(new ValidationError("Conversation ID is required", "conversationId"));
     }
+    const hasContent = params.content.trim().length > 0;
+    const hasAttachments = (params.attachments?.length ?? 0) > 0;
+    if (!hasContent && !hasAttachments) {
+      return err(new ValidationError("Message content or attachment is required", "content"));
+    }
+    return safeExecute(
+      () => this.messageRepository.send(params),
+      "Failed to send message",
+      "MESSAGE_SEND_FAILED"
+    );
   }
 }

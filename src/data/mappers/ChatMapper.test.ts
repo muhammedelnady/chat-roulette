@@ -3,10 +3,10 @@
 import { mapConversationDtoToEntity, mapMessageDtoToEntity } from "./ChatMapper";
 
 describe("ChatMapper", () => {
-  it("maps ConversationDto and MessageDto to domain entities safely", () => {
+  it("maps ConversationDto and MessageDto safely, picking latest message and validating fields", () => {
     const msg = mapMessageDtoToEntity({
       id: "m-1",
-      clientId: "c-1",
+      clientId: "",
       conversationId: "conv-1",
       senderType: "USER",
       content: "Hello",
@@ -21,9 +21,17 @@ describe("ChatMapper", () => {
           fileName: "pic.png",
           fileSize: 2048,
         },
+        {
+          url: "",
+          mimeType: "image/png",
+          fileName: "broken.png",
+          fileSize: 10,
+        },
       ],
     });
     expect(msg.id).toBe("m-1");
+    expect(msg.clientId).toBe("m-1");
+    expect(msg.attachments).toHaveLength(1);
     expect(msg.attachments[0]?.id).toBe("up-1");
 
     const conv = mapConversationDtoToEntity({
@@ -31,24 +39,36 @@ describe("ChatMapper", () => {
       scope: "ROULETTE",
       handledBy: "PEER",
       subject: "Sarah Chen",
-      category: "ROULETTE",
+      category: "INVALID_CAT" as unknown as "ROULETTE",
       isRouletteMatch: true,
       createdAt: "2026-11-21T00:00:00.000Z",
-      updatedAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:02:00.000Z",
       messages: [
         {
-          id: "m-1",
-          clientId: "c-1",
+          id: "m-old",
+          clientId: "c-old",
           conversationId: "conv-1",
           senderType: "UNKNOWN_TYPE",
+          content: "First",
           contentType: "text",
           isEdited: false,
-          createdAt: "2026-11-21T00:00:00.000Z",
+          createdAt: "2026-11-21T00:01:00.000Z",
+        },
+        {
+          id: "m-new",
+          clientId: "c-new",
+          conversationId: "conv-1",
+          senderType: "SUPPORT_AGENT",
+          content: "Latest",
+          contentType: "text",
+          isEdited: false,
+          createdAt: "2026-11-21T00:02:00.000Z",
         },
       ],
     });
 
     expect(conv.scope).toBe("ROULETTE");
-    expect(conv.lastMessage?.senderType).toBe("USER");
+    expect(conv.category).toBeUndefined();
+    expect(conv.lastMessage?.id).toBe("m-new");
   });
 });

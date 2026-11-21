@@ -1,34 +1,29 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  type ListRenderItemInfo,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-} from "react-native";
+import { memo, useCallback, useMemo } from "react";
+import { ActivityIndicator, FlatList, type ListRenderItemInfo, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { Text } from "@/src/presentation/components/atoms";
+import { Button, Text } from "@/src/presentation/components/atoms";
 import { PageLayout } from "@/src/presentation/components/templates";
 import { useUI } from "@/src/presentation/hooks";
+import { FADE_ENTER } from "@/src/presentation/theme";
 
 import type { ChatConversationEntity } from "../../../shared/types";
-import { RecruiterControlBar, RoomListItem, RouletteHeroCard } from "../components";
+import { RoomListItem } from "../components";
 
-import { CHAT_ROOMS_TEST_IDS, ROOM_CATEGORY_FILTERS } from "./ChatRoomsContent.constants";
+import { CHAT_ROOMS_TEST_IDS } from "./ChatRoomsContent.constants";
 import { styles } from "./ChatRoomsContent.styles";
 import type { ChatRoomsContentProps, ChatRoomsViewModel } from "./ChatRoomsContent.types";
 import { useChatRoomsViewModel } from "./ChatRoomsContent.viewmodel";
+import { ChatRoomsListHeader } from "./ChatRoomsListHeader";
 
 const ChatRoomsContentView = memo<{
   readonly viewModel: ChatRoomsViewModel;
   readonly testID?: string;
 }>(({ viewModel, testID = CHAT_ROOMS_TEST_IDS.ROOT }) => {
-  const { colors, t, isRTL } = useUI();
+  const { colors, t } = useUI();
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ChatConversationEntity>) => (
@@ -39,147 +34,131 @@ const ChatRoomsContentView = memo<{
 
   const keyExtractor = useCallback((item: ChatConversationEntity) => item.id, []);
 
-  const listHeader = (
-    <>
-      <View style={styles.header}>
-        <View style={[styles.titleRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-          <Text variant="2xl" weight="bold" color={colors.textPrimary}>
-            {t("rooms.title")}
-          </Text>
-          <View style={[styles.titleBadge, { backgroundColor: colors.primaryTint }]}>
-            <Ionicons name="pulse" size={14} color={colors.accent} />
-            <Text variant="xs" weight="bold" color={colors.accent}>
-              {t("rooms.liveNow")}
-            </Text>
-          </View>
+  const handleRefresh = useCallback(() => {
+    void viewModel.refresh();
+  }, [viewModel]);
+
+  const listHeaderComponent = useMemo(
+    () => <ChatRoomsListHeader viewModel={viewModel} />,
+    [viewModel]
+  );
+
+  const listEmptyComponent = useMemo(() => {
+    if (viewModel.isLoading) {
+      return (
+        <View testID={CHAT_ROOMS_TEST_IDS.LOADING_SPINNER} style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-        <Text variant="sm" color={colors.textSecondary}>
-          {t("rooms.subtitle")}
-        </Text>
-      </View>
+      );
+    }
 
-      <RecruiterControlBar
-        isOnline={viewModel.isOnline}
-        isDark={viewModel.isDark}
-        isRTL={viewModel.isRTL}
-        outboundQueueCount={viewModel.outboundQueueCount}
-        onToggleOffline={viewModel.toggleOfflineMode}
-        onToggleTheme={viewModel.toggleTheme}
-        onToggleLanguage={viewModel.toggleLanguage}
-      />
-
-      <RouletteHeroCard
-        onlineCount={viewModel.totalOnlineMembers}
-        onSpinPress={viewModel.openRoulette}
-      />
-
-      <View
-        style={[
-          styles.searchBox,
-          {
-            backgroundColor: colors.searchInputBackground,
-            borderColor: colors.searchBorder,
-            flexDirection: isRTL ? "row-reverse" : "row",
-          },
-        ]}
-      >
-        <Ionicons name="search-outline" size={18} color={colors.textPlaceholder} />
-        <TextInput
-          testID={CHAT_ROOMS_TEST_IDS.SEARCH_INPUT}
-          value={viewModel.searchQuery}
-          onChangeText={viewModel.setSearchQuery}
-          placeholder={t("rooms.searchPlaceholder")}
-          placeholderTextColor={colors.textPlaceholder}
+    if (viewModel.error) {
+      return (
+        <Animated.View
+          entering={FADE_ENTER}
+          testID={CHAT_ROOMS_TEST_IDS.ERROR_STATE}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
           style={[
-            styles.searchInput,
-            {
-              color: colors.textPrimary,
-              textAlign: isRTL ? "right" : "left",
-            },
+            styles.emptyContainer,
+            { backgroundColor: colors.surface, borderColor: colors.errorBorder },
           ]}
-        />
-        {viewModel.searchQuery.length > 0 ? (
-          <Pressable onPress={() => viewModel.setSearchQuery("")}>
-            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesScroll}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {ROOM_CATEGORY_FILTERS.map((cat) => {
-          const isSelected = viewModel.selectedCategory === cat.key;
-          return (
-            <Pressable
-              key={cat.key}
-              testID={CHAT_ROOMS_TEST_IDS.CATEGORY_CHIP(cat.key)}
-              onPress={() => viewModel.setSelectedCategory(cat.key)}
-              style={({ pressed }) => [
-                styles.categoryChip,
-                {
-                  backgroundColor: isSelected ? colors.primary : colors.surface,
-                  borderColor: isSelected ? colors.primary : colors.borderStrong,
-                },
-                pressed && { opacity: 0.8 },
+        >
+          <View style={[styles.emptyHalo, { backgroundColor: colors.errorTint }]}>
+            <View
+              style={[
+                styles.emptyIcon,
+                { backgroundColor: colors.errorTint, borderColor: colors.errorBorder },
               ]}
             >
-              <Text
-                variant="xs"
-                weight="bold"
-                color={isSelected ? colors.textOnPrimary : colors.textSecondary}
-              >
-                {t(cat.labelKey)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </>
-  );
+              <Ionicons name="cloud-offline-outline" size={28} color={colors.error} />
+            </View>
+          </View>
+          <Text variant="md" weight="bold" color={colors.error} centered style={styles.emptyTitle}>
+            {viewModel.error}
+          </Text>
+          <View style={styles.retryWrapper}>
+            <Button
+              testID={CHAT_ROOMS_TEST_IDS.RETRY_BUTTON}
+              label={t("common.retry")}
+              variant="outline"
+              size="sm"
+              onPress={handleRefresh}
+            />
+          </View>
+        </Animated.View>
+      );
+    }
+
+    return (
+      <Animated.View
+        entering={FADE_ENTER}
+        testID={CHAT_ROOMS_TEST_IDS.EMPTY_STATE}
+        style={[
+          styles.emptyContainer,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        <View style={[styles.emptyHalo, { backgroundColor: colors.primaryTint2 }]}>
+          <View
+            style={[
+              styles.emptyIcon,
+              { backgroundColor: colors.primaryTint, borderColor: colors.borderGlow },
+            ]}
+          >
+            <Ionicons name="planet-outline" size={30} color={colors.accent} />
+          </View>
+        </View>
+        <Text
+          variant="md"
+          weight="bold"
+          color={colors.textPrimary}
+          centered
+          style={styles.emptyTitle}
+        >
+          {t("rooms.emptyRoomsTitle")}
+        </Text>
+        <Text variant="sm" color={colors.textSecondary} centered>
+          {t("rooms.emptyRoomsSubtitle")}
+        </Text>
+      </Animated.View>
+    );
+  }, [
+    colors.accent,
+    colors.border,
+    colors.borderGlow,
+    colors.error,
+    colors.errorBorder,
+    colors.errorTint,
+    colors.primary,
+    colors.primaryTint,
+    colors.primaryTint2,
+    colors.surface,
+    colors.textPrimary,
+    colors.textSecondary,
+    handleRefresh,
+    t,
+    viewModel.error,
+    viewModel.isLoading,
+  ]);
 
   return (
     <PageLayout testID={testID}>
       <FlatList
         testID={CHAT_ROOMS_TEST_IDS.LIST}
-        data={[...viewModel.rooms]}
+        data={viewModel.rooms}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={listHeaderComponent}
+        ListEmptyComponent={listEmptyComponent}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshing={viewModel.isRefreshing}
+        onRefresh={handleRefresh}
         windowSize={5}
         initialNumToRender={8}
         maxToRenderPerBatch={8}
-        removeClippedSubviews
-        ListEmptyComponent={
-          viewModel.isLoading ? (
-            <View testID={CHAT_ROOMS_TEST_IDS.LOADING_SPINNER} style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : (
-            <View testID={CHAT_ROOMS_TEST_IDS.EMPTY_STATE} style={styles.emptyContainer}>
-              <View style={[styles.emptyIcon, { backgroundColor: colors.primaryTint }]}>
-                <Ionicons name="planet-outline" size={30} color={colors.accent} />
-              </View>
-              <Text
-                variant="md"
-                weight="bold"
-                color={colors.textPrimary}
-                centered
-                style={styles.emptyTitle}
-              >
-                {t("rooms.emptyRoomsTitle")}
-              </Text>
-              <Text variant="sm" color={colors.textSecondary} centered>
-                {t("rooms.emptyRoomsSubtitle")}
-              </Text>
-            </View>
-          )
-        }
       />
     </PageLayout>
   );

@@ -23,16 +23,47 @@ import { generateUUID } from "@/src/domain/utils/uuid";
 
 import { type SimulatedChatEngine, sharedSimulatedChatEngine } from "./SimulatedChatEngine";
 
+const SIM_OUTBOUND_QUEUE_KEY = "@chat_outbound_queue:sim";
+
+interface FileDescriptor {
+  uri?: string;
+  name?: string;
+  type?: string;
+}
+
+function extractFileFromFormData(formData: FormData): FileDescriptor | undefined {
+  if ("get" in formData && typeof formData.get === "function") {
+    const val = formData.get("file");
+    if (val && typeof val === "object") {
+      return {
+        uri: "uri" in val && typeof val.uri === "string" ? val.uri : undefined,
+        name: "name" in val && typeof val.name === "string" ? val.name : undefined,
+        type: "type" in val && typeof val.type === "string" ? val.type : undefined,
+      };
+    }
+  }
+  const rnForm = formData as unknown as {
+    _parts?: [string, FileDescriptor][];
+  };
+  return rnForm._parts?.[0]?.[1];
+}
+
 export class SimulatedChatRepository implements IConversationRepository {
   constructor(private readonly engine: SimulatedChatEngine = sharedSimulatedChatEngine) {}
 
-  async list(): Promise<
-    Result<{ data: ConversationEntity[]; nextCursor: string | null }, AppError>
-  > {
+  async list(
+    cursor?: string,
+    limit?: number
+  ): Promise<Result<{ data: ConversationEntity[]; nextCursor: string | null }, AppError>> {
     await Promise.resolve();
+    const all = this.engine.listConversations();
+    const startIdx = cursor ? Math.max(0, all.findIndex((c) => c.id === cursor) + 1) : 0;
+    const endIdx = limit && limit > 0 ? startIdx + limit : all.length;
+    const page = all.slice(startIdx, endIdx);
+    const nextCursor = endIdx < all.length ? (page[page.length - 1]?.id ?? null) : null;
     return ok({
-      data: this.engine.listConversations(),
-      nextCursor: null,
+      data: page,
+      nextCursor,
     });
   }
 
@@ -70,12 +101,19 @@ export class SimulatedMessageRepository implements IMessageRepository {
   constructor(private readonly engine: SimulatedChatEngine = sharedSimulatedChatEngine) {}
 
   async list(
-    conversationId: string
+    conversationId: string,
+    cursor?: string,
+    limit?: number
   ): Promise<Result<{ data: MessageEntity[]; nextCursor: string | null }, AppError>> {
     await Promise.resolve();
+    const all = this.engine.listMessages(conversationId);
+    const startIdx = cursor ? Math.max(0, all.findIndex((m) => m.id === cursor) + 1) : 0;
+    const endIdx = limit && limit > 0 ? startIdx + limit : all.length;
+    const page = all.slice(startIdx, endIdx);
+    const nextCursor = endIdx < all.length ? (page[page.length - 1]?.id ?? null) : null;
     return ok({
-      data: this.engine.listMessages(conversationId),
-      nextCursor: null,
+      data: page,
+      nextCursor,
     });
   }
 
@@ -91,7 +129,7 @@ export class SimulatedMessageRepository implements IMessageRepository {
     await Promise.resolve();
     const clientId = params.clientId ?? generateUUID();
     const entity: MessageEntity = {
-      id: `msg-${clientId}`,
+      id: clientId,
       clientId,
       conversationId: params.conversationId,
       senderType: "USER",
@@ -118,8 +156,11 @@ export class SimulatedMessageRepository implements IMessageRepository {
     return ok(this.engine.upsertMessage(params.conversationId, entity));
   }
 
-  async markRead(): Promise<Result<void, AppError>> {
+  async markRead(conversationId?: string): Promise<Result<void, AppError>> {
     await Promise.resolve();
+    if (conversationId) {
+      this.engine.markConversationRead(conversationId);
+    }
     return ok(undefined);
   }
 
@@ -135,13 +176,11 @@ export class SimulatedMessageRepository implements IMessageRepository {
   async uploadAttachment(formData: FormData): Promise<Result<MessageAttachmentEntity, AppError>> {
     await Promise.resolve();
     const uploadId = `sim-att-${generateUUID().slice(0, 8)}`;
-    const fileRecord = (
-      formData as unknown as { _parts?: [string, { uri?: string; name?: string; type?: string }][] }
-    )._parts?.[0]?.[1];
+    const fileRecord = extractFileFromFormData(formData);
     return ok({
       id: uploadId,
       uploadId,
-      url: fileRecord?.uri ?? "https://picsum.photos/seed/chatroulette/600/400",
+      url: fileRecord?.uri ?? `simulated://attachments/${uploadId}.jpg`,
       mimeType: fileRecord?.type ?? "image/jpeg",
       fileName: fileRecord?.name ?? "snapshot.jpg",
       fileSize: 128000,
@@ -162,8 +201,11 @@ export class SimulatedMessageRepository implements IMessageRepository {
     });
   }
 
-  async deleteAttachment(): Promise<Result<void, AppError>> {
+  async deleteAttachment(attachmentId?: string): Promise<Result<void, AppError>> {
     await Promise.resolve();
+    if (attachmentId) {
+      this.engine.deleteAttachment(attachmentId);
+    }
     return ok(undefined);
   }
 }
@@ -174,23 +216,26 @@ export class SimulatedChatSocketService implements IChatSocketService {
   private outboundQueue: ChatOutboundQueue;
   private listeners: { event: string; handler: (...args: unknown[]) => void }[] = [];
   private activeTimers = new Set<ReturnType<typeof setTimeout>>();
+  private unsubscribeConnectivity: (() => void) | null = null;
 
   constructor(
     private readonly logger: ChatSocketLogger,
     private readonly connectivity?: IConnectivityChecker,
     private readonly engine: SimulatedChatEngine = sharedSimulatedChatEngine
   ) {
-    this.outboundQueue = new ChatOutboundQueue(logger);
-    this.connectivity?.observeConnectivity?.((isConnected) => {
-      if (isConnected) {
-        this.drainBuffer();
-      }
-      this.emitQueueCount();
-    });
+    this.outboundQueue = new ChatOutboundQueue(logger, SIM_OUTBOUND_QUEUE_KEY);
+    this.unsubscribeConnectivity =
+      this.connectivity?.observeConnectivity?.((isConnected) => {
+        if (!this.connected) return;
+        if (isConnected) {
+          this.drainBuffer();
+        }
+        this.emitQueueCount();
+      }) ?? null;
   }
 
   private emitLocal(event: string, payload: unknown): void {
-    for (const listener of this.listeners) {
+    for (const listener of [...this.listeners]) {
       if (listener.event === event) {
         try {
           listener.handler(payload);
@@ -203,6 +248,10 @@ export class SimulatedChatSocketService implements IChatSocketService {
 
   private emitQueueCount(): void {
     this.emitLocal("queue:updated", { count: this.outboundQueue.size });
+  }
+
+  private isCurrentlyOnline(): boolean {
+    return this.connected && (this.connectivity?.isConnected() ?? true);
   }
 
   private schedule(fn: () => void, delayMs: number): void {
@@ -232,10 +281,17 @@ export class SimulatedChatSocketService implements IChatSocketService {
 
   disconnect(): void {
     this.connected = false;
+    this.activeConversationId = null;
     for (const timer of this.activeTimers) {
       clearTimeout(timer);
     }
     this.activeTimers.clear();
+  }
+
+  dispose(): void {
+    this.disconnect();
+    this.unsubscribeConnectivity?.();
+    this.unsubscribeConnectivity = null;
   }
 
   isConnected(): boolean {
@@ -275,7 +331,7 @@ export class SimulatedChatSocketService implements IChatSocketService {
   }): void {
     const isOnline = this.connectivity?.isConnected() ?? true;
 
-    if (!isOnline) {
+    if (!isOnline || !this.connected) {
       const queuedMessage: QueuedMessage = {
         ...data,
         status: "PENDING",
@@ -336,6 +392,7 @@ export class SimulatedChatSocketService implements IChatSocketService {
     this.engine.upsertMessage(data.conversationId, saved);
 
     this.schedule(() => {
+      if (!this.isCurrentlyOnline()) return;
       this.outboundQueue.removeDelivered(data.clientId);
       this.emitQueueCount();
       this.emitLocal("message:delivered", {
@@ -346,6 +403,7 @@ export class SimulatedChatSocketService implements IChatSocketService {
     }, 220);
 
     this.schedule(() => {
+      if (!this.isCurrentlyOnline()) return;
       this.emitLocal("message:read", {
         conversationId: data.conversationId,
         messageId: saved.id,
@@ -359,6 +417,7 @@ export class SimulatedChatSocketService implements IChatSocketService {
     }, 550);
 
     this.schedule(() => {
+      if (!this.isCurrentlyOnline()) return;
       this.emitLocal("typing:update", {
         conversationId: data.conversationId,
         userIds: [],
@@ -374,21 +433,28 @@ export class SimulatedChatSocketService implements IChatSocketService {
   private drainBuffer(): void {
     if (!(this.connectivity?.isConnected() ?? true)) return;
     this.outboundQueue.drain((_event, payload) => {
-      this.processOutboundPayload(payload as QueuedMessage);
+      this.processOutboundPayload(payload);
     });
     this.emitQueueCount();
   }
 
-  deleteAttachment(): void {}
+  deleteAttachment(data: { attachmentId: string }): void {
+    this.engine.deleteAttachment(data.attachmentId);
+  }
 
   startTyping(): void {}
 
   stopTyping(): void {}
 
-  markMessageRead(): void {}
+  markMessageRead(conversationId: string): void {
+    this.engine.markConversationRead(conversationId);
+  }
 
   onEvent(event: string, handler: (...args: unknown[]) => void): void {
-    this.listeners.push({ event, handler });
+    const exists = this.listeners.some((l) => l.event === event && l.handler === handler);
+    if (!exists) {
+      this.listeners.push({ event, handler });
+    }
   }
 
   offEvent(event: string, handler?: (...args: unknown[]) => void): void {

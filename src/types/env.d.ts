@@ -7,7 +7,6 @@ declare global {
       EXPO_PUBLIC_API_URL?: string;
       EXPO_PUBLIC_ENV?: string;
       EXPO_PUBLIC_APP_SCHEME?: string;
-      EXPO_PUBLIC_MMKV_ENCRYPTION_KEY?: string;
     }
   }
 }

@@ -1,13 +1,13 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet } from "react-native";
+import { ScrollView, StyleSheet, View as RNView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button, Text, View } from "@/src/presentation/components/atoms";
 import { ContentContainer } from "@/src/presentation/components/templates";
 import { useUI } from "@/src/presentation/hooks";
-import { borderRadius, spacing, typography } from "@theme";
+import { borderRadius, gradients, spacing, typography } from "@theme";
 
 interface ErrorFallbackProps {
   readonly error: Error | null;
@@ -15,34 +15,51 @@ interface ErrorFallbackProps {
 }
 
 export function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps) {
-  const { t, colors, isRTL } = useUI();
+  const { t, colors, shadows, isRTL } = useUI();
   const align = isRTL ? "right" : "left";
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ContentContainer style={styles.contentContainer}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.errorTint }]}>
-            <Ionicons name="warning-outline" size={44} color={colors.error} />
-          </View>
+          <RNView
+            style={[
+              styles.outerHalo,
+              { backgroundColor: colors.errorTint, borderColor: colors.errorBorder },
+            ]}
+          >
+            <RNView
+              style={[
+                styles.iconContainer,
+                { backgroundColor: colors.surface, borderColor: colors.errorBorder },
+              ]}
+            >
+              <Ionicons name="warning-outline" size={38} color={colors.error} />
+            </RNView>
+          </RNView>
 
           <Text variant="xl" weight="bold" style={[styles.title, { textAlign: align }]}>
             {t("errors.errorOccurred")}
           </Text>
 
-          <Text variant="md" style={[styles.message, { textAlign: align }]}>
+          <Text
+            variant="md"
+            color={colors.textSecondary}
+            style={[styles.message, { textAlign: align }]}
+          >
             {t("errors.errorDescription")}
           </Text>
 
           {__DEV__ && error !== null && (
-            <View
+            <RNView
               style={[
                 styles.errorDetails,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                shadows.sm,
+                { backgroundColor: colors.surface, borderColor: colors.errorBorder },
               ]}
             >
               <Text
-                variant="md"
+                variant="sm"
                 weight="bold"
                 color={colors.error}
                 style={styles.errorDetailsTitle}
@@ -51,19 +68,19 @@ export function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps)
               </Text>
 
               <ScrollView>
-                <View style={styles.errorContent}>
+                <RNView style={[styles.errorContent, { backgroundColor: colors.surfaceElevated }]}>
                   <Text variant="sm" color={colors.error} style={styles.errorMessage}>
                     {error.message}
                   </Text>
-                </View>
+                </RNView>
               </ScrollView>
-            </View>
+            </RNView>
           )}
 
           <Button
             label={t("errors.tryAgain")}
             onPress={resetErrorBoundary}
-            variant="primary"
+            gradient={gradients.primary}
             style={styles.retryButton}
           />
         </ContentContainer>
@@ -81,26 +98,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: spacing[24],
   },
-  iconContainer: {
-    width: 84,
-    height: 84,
+  outerHalo: {
+    width: 108,
+    height: 108,
     borderRadius: borderRadius.full,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: spacing[24],
   },
-  title: { marginBottom: spacing[12] },
+  iconContainer: {
+    width: 82,
+    height: 82,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: { marginBottom: spacing[10] },
   message: {
     marginBottom: spacing[24],
-    lineHeight: 24,
+    lineHeight: 22,
   },
   errorDetails: {
     borderWidth: 1,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
+    borderCurve: "continuous",
     padding: spacing[16],
     marginBottom: spacing[24],
     width: "100%",
-    maxHeight: 280,
+    maxHeight: 260,
   },
   errorDetailsTitle: { marginBottom: spacing[8] },
   errorContent: {
@@ -109,7 +136,6 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontFamily: typography.fontFamily.regular,
-    marginBottom: spacing[8],
   },
   retryButton: {
     width: "100%",

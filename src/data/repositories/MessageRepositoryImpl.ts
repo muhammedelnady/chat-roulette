@@ -5,28 +5,38 @@
 
 import { http } from "@/src/data/api";
 import type { AttachmentDto, MessageDto, MessagesListResponse } from "@/src/data/api/dtos/chat";
+import {
+  attachmentDtoSchema,
+  messageDtoSchema,
+  messagesListResponseSchema,
+  uploadAudioResultSchema,
+} from "@/src/data/api/dtos/chat/schemas";
 import type { ApiResponse } from "@/src/data/api/dtos/common";
 import {
   CHAT_ATTACHMENT_DELETE_API,
   CHAT_UPLOAD_API,
   CHAT_UPLOAD_AUDIO_API,
-  CONVERSATION_BY_ID_API,
   MESSAGES_API,
   MESSAGE_REACTION_API,
+  MESSAGE_READ_API,
   MESSAGE_SEND_API,
+  buildApiUrl,
 } from "@/src/data/api/endpoints";
 import { mapMessageDtoToEntity } from "@/src/data/mappers/ChatMapper";
-import { log } from "@/src/data/utils/logger";
 import type {
   MessageAttachmentEntity,
   MessageAttachmentInput,
   MessageEntity,
 } from "@/src/domain/entities";
-import type { AppError } from "@/src/domain/errors";
+import { NetworkError, SerializationError, type AppError } from "@/src/domain/errors";
 import type { IMessageRepository, UploadAudioResult } from "@/src/domain/repositories";
 import { err, ok, type Result } from "@/src/domain/Result";
+import { log } from "@/src/infrastructure/logging/logger";
 
 import { BaseRepository } from "./BaseRepository";
+
+const CACHE_TTL_MS = 60_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
 
 export class MessageRepositoryImpl extends BaseRepository implements IMessageRepository {
   async list(
@@ -34,17 +44,37 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
     cursor?: string,
     limit?: number
   ): Promise<Result<{ data: MessageEntity[]; nextCursor: string | null }, AppError>> {
+    const cacheKey = `chat:messages:${conversationId}:${cursor ?? "first"}:${limit ?? "default"}`;
+
+    if (!this.isOnline()) {
+      const cached = this.cacheManager.getStaleFallback<{
+        data: MessageEntity[];
+        nextCursor: string | null;
+      }>(cacheKey);
+      if (cached) return ok(cached);
+      return err(new NetworkError("Cannot fetch messages while offline"));
+    }
+
     try {
       const params: Record<string, string> = {};
       if (cursor) params["cursor"] = cursor;
       if (limit) params["limit"] = String(limit);
-      const url = MESSAGES_API.replace(":conversationId", conversationId);
+      const url = buildApiUrl(MESSAGES_API, { conversationId });
       const response = await http.get<ApiResponse<MessagesListResponse>>(url, { params });
-      const data = response.data;
-      return ok({
-        data: data.data.map(mapMessageDtoToEntity),
-        nextCursor: data.nextCursor,
-      });
+      const parsed = messagesListResponseSchema.safeParse(response.data);
+      if (!parsed.success) {
+        return err(
+          new SerializationError("Invalid messages list response", {
+            issues: parsed.error.issues,
+          })
+        );
+      }
+      const resultValue = {
+        data: parsed.data.data.map(mapMessageDtoToEntity),
+        nextCursor: parsed.data.nextCursor,
+      };
+      this.cacheManager.set(cacheKey, resultValue, CACHE_TTL_MS);
+      return ok(resultValue);
     } catch (error) {
       log.error(`Failed to fetch messages for ${conversationId}:`, error);
       return err(this.handleError(error, "getMessages", "MESSAGES_FETCH_FAILED"));
@@ -61,9 +91,20 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
     attachments?: (MessageAttachmentEntity | MessageAttachmentInput)[];
   }): Promise<Result<MessageEntity, AppError>> {
     try {
-      const url = MESSAGE_SEND_API.replace(":conversationId", params.conversationId);
-      const response = await http.post<ApiResponse<MessageDto>>(url, params);
-      return ok(mapMessageDtoToEntity(response.data));
+      const { conversationId, ...body } = params;
+      const url = buildApiUrl(MESSAGE_SEND_API, { conversationId });
+      const response = await http.post<ApiResponse<MessageDto>>(url, body);
+      const parsed = messageDtoSchema.safeParse(response.data);
+      if (!parsed.success) {
+        return err(
+          new SerializationError("Invalid send message response", {
+            issues: parsed.error.issues,
+          })
+        );
+      }
+      this.cacheManager.invalidatePrefix(`chat:messages:${conversationId}:`);
+      this.cacheManager.invalidatePrefix("chat:conversations:");
+      return ok(mapMessageDtoToEntity(parsed.data));
     } catch (error) {
       log.error("Failed to send message:", error);
       return err(this.handleError(error, "sendMessage", "MESSAGE_SEND_FAILED"));
@@ -72,8 +113,9 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
 
   async markRead(conversationId: string, messageId: string): Promise<Result<void, AppError>> {
     try {
-      const url = CONVERSATION_BY_ID_API.replace(":id", conversationId) + "/read";
+      const url = buildApiUrl(MESSAGE_READ_API, { id: conversationId });
       await http.post(url, { messageId });
+      this.cacheManager.invalidatePrefix("chat:conversations:");
       return ok(undefined);
     } catch (error) {
       log.error("Failed to mark message read:", error);
@@ -87,12 +129,21 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
     emoji: string
   ): Promise<Result<MessageEntity | null, AppError>> {
     try {
-      const url = MESSAGE_REACTION_API.replace(":conversationId", conversationId).replace(
-        ":messageId",
-        messageId
-      );
-      const response = await http.post<ApiResponse<MessageDto>>(url, { emoji });
-      return ok(mapMessageDtoToEntity(response.data));
+      const url = buildApiUrl(MESSAGE_REACTION_API, { conversationId, messageId });
+      const response = await http.post<ApiResponse<MessageDto | null>>(url, { emoji });
+      if (!response.data) {
+        return ok(null);
+      }
+      const parsed = messageDtoSchema.safeParse(response.data);
+      if (!parsed.success) {
+        return err(
+          new SerializationError("Invalid reaction response", {
+            issues: parsed.error.issues,
+          })
+        );
+      }
+      this.cacheManager.invalidatePrefix(`chat:messages:${conversationId}:`);
+      return ok(mapMessageDtoToEntity(parsed.data));
     } catch (error) {
       log.error("Failed to toggle message reaction:", error);
       return err(this.handleError(error, "toggleReaction", "MESSAGE_REACTION_FAILED"));
@@ -102,13 +153,26 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
   async uploadAttachment(formData: FormData): Promise<Result<MessageAttachmentEntity, AppError>> {
     try {
       const response = await http.post<ApiResponse<AttachmentDto>>(CHAT_UPLOAD_API, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        timeout: UPLOAD_TIMEOUT_MS,
       });
-      const dto = response.data;
+      const parsed = attachmentDtoSchema.safeParse(response.data);
+      if (!parsed.success) {
+        return err(
+          new SerializationError("Invalid attachment upload response", {
+            issues: parsed.error.issues,
+          })
+        );
+      }
+      const dto = parsed.data;
+      const id = dto.id ?? dto.uploadId;
+      const url = dto.url;
+      if (!id || !url) {
+        return err(new SerializationError("Attachment upload response missing id or url"));
+      }
       return ok({
         ...dto,
-        id: dto.id ?? dto.uploadId ?? "",
-        url: dto.url ?? "",
+        id,
+        url,
       });
     } catch (error) {
       log.error("Failed to upload attachment:", error);
@@ -122,10 +186,18 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
         CHAT_UPLOAD_AUDIO_API,
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
+          timeout: UPLOAD_TIMEOUT_MS,
         }
       );
-      return ok(response.data);
+      const parsed = uploadAudioResultSchema.safeParse(response.data);
+      if (!parsed.success) {
+        return err(
+          new SerializationError("Invalid audio upload response", {
+            issues: parsed.error.issues,
+          })
+        );
+      }
+      return ok(parsed.data);
     } catch (error) {
       log.error("Failed to upload audio:", error);
       return err(this.handleError(error, "uploadAudio", "AUDIO_UPLOAD_FAILED"));
@@ -134,7 +206,7 @@ export class MessageRepositoryImpl extends BaseRepository implements IMessageRep
 
   async deleteAttachment(attachmentId: string): Promise<Result<void, AppError>> {
     try {
-      const url = CHAT_ATTACHMENT_DELETE_API.replace(":attachmentId", attachmentId);
+      const url = buildApiUrl(CHAT_ATTACHMENT_DELETE_API, { attachmentId });
       await http.delete(url);
       return ok(undefined);
     } catch (error) {

@@ -1,16 +1,23 @@
 /** @format */
 
-import { memo, useCallback, useEffect, useRef } from "react";
-import { ActivityIndicator, FlatList, type ListRenderItemInfo, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  type ListRenderItemInfo,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  View,
+} from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import Animated from "react-native-reanimated";
 
 import { Text } from "@/src/presentation/components/atoms";
 import { PageLayout } from "@/src/presentation/components/templates";
 import { useUI } from "@/src/presentation/hooks";
+import { FADE_DOWN_ENTER, FADE_DOWN_EXIT } from "@/src/presentation/theme";
 
 import type { ChatMessageEntity } from "../../../shared/types";
 import {
-  ChatEmptyState,
   ChatFaqOptionsBar,
   ChatHeader,
   ChatInputBar,
@@ -19,20 +26,23 @@ import {
   ChatTypingIndicator,
   QueueStatusBanner,
 } from "../components";
+import { MessageImageLightbox } from "../components/ChatMessageBubble/MessageImageLightbox";
 
 import { CHAT_CONTENT_TEST_IDS } from "./ChatContent.constants";
 import { styles } from "./ChatContent.styles";
 import type { ChatContentProps, ChatViewModel } from "./ChatContent.types";
 import { useChatViewModel } from "./ChatContent.viewmodel";
+import { ChatListEmpty, getSenderGroupKey, type GroupedMessageRow } from "./ChatListEmpty";
 
 export const ChatContentView = memo<{
   readonly viewModel: ChatViewModel;
   readonly testID?: string;
 }>(({ viewModel, testID = CHAT_CONTENT_TEST_IDS.ROOT }) => {
   const { colors, t } = useUI();
-  const listRef = useRef<FlatList<ChatMessageEntity>>(null);
+  const listRef = useRef<FlatList<GroupedMessageRow>>(null);
+  const isNearBottomRef = useRef(true);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  const vm = viewModel;
   const {
     conversation,
     messages,
@@ -41,57 +51,140 @@ export const ChatContentView = memo<{
     typingUsers,
     isLoading,
     isSending,
+    isError,
+    error,
     isClosed,
     queueStatus,
     headerSubtitle,
     isNetworkOnline,
     outboundQueueCount,
-  } = vm;
+    deleteAttachment,
+    sendMessage,
+    handleRetryMessage,
+    toggleReaction,
+    pickAttachment,
+    refresh,
+  } = viewModel;
+
+  const newestMessageKey = messages[0] ? messages[0].clientId || messages[0].id : null;
 
   useEffect(() => {
-    if (messages.length > 0) {
+    if (newestMessageKey && isNearBottomRef.current) {
       const timer = setTimeout(() => {
         listRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 80);
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [messages.length]);
+  }, [newestMessageKey]);
 
-  const renderItem = useCallback(
-    ({ item, index }: ListRenderItemInfo<ChatMessageEntity>) => {
-      const newerMsg = index > 0 ? messages[index - 1] : undefined;
-      const olderMsg = index < messages.length - 1 ? messages[index + 1] : undefined;
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    isNearBottomRef.current = event.nativeEvent.contentOffset.y < 120;
+  }, []);
 
-      return (
-        <ChatMessageBubble
-          message={item}
-          isOwn={item.senderType === "USER"}
-          isFirstInGroup={olderMsg?.senderType !== item.senderType}
-          isLastInGroup={newerMsg?.senderType !== item.senderType}
-          onDeleteAttachment={(attId, msgId) => void vm.deleteAttachment(attId, msgId)}
-          onSelectFaqOption={(query) => void vm.sendMessage(query)}
-          onRetryMessage={(message) => void vm.handleRetryMessage(message)}
-          onToggleReaction={(msgId, emoji) => void vm.toggleReaction(msgId, emoji)}
-        />
-      );
-    },
-    [messages, vm]
+  const handleDeleteAttachment = useCallback(
+    (attId: string, msgId: string) => void deleteAttachment(attId, msgId),
+    [deleteAttachment]
   );
 
-  const keyExtractor = useCallback((item: ChatMessageEntity) => item.id || item.clientId, []);
+  const handleSelectFaqOption = useCallback(
+    (query: string) => void sendMessage(query, { includeStagedAttachments: false }),
+    [sendMessage]
+  );
+
+  const handleSendText = useCallback((text: string) => void sendMessage(text), [sendMessage]);
+
+  const handlePickAttachment = useCallback(() => void pickAttachment(), [pickAttachment]);
+
+  const handleRetry = useCallback(
+    (message: ChatMessageEntity) => void handleRetryMessage(message),
+    [handleRetryMessage]
+  );
+
+  const handleToggleReaction = useCallback(
+    (msgId: string, emoji: string) => void toggleReaction(msgId, emoji),
+    [toggleReaction]
+  );
+
+  const handlePreviewImage = useCallback((url: string) => {
+    setPreviewImageUrl(url);
+  }, []);
+
+  const handleCloseLightbox = useCallback(() => {
+    setPreviewImageUrl(null);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
+  const groupedRows = useMemo<readonly GroupedMessageRow[]>(
+    () =>
+      messages.map((item, idx) => {
+        const currentKey = getSenderGroupKey(item);
+        const newerKey = getSenderGroupKey(messages[idx - 1]);
+        const olderKey = getSenderGroupKey(messages[idx + 1]);
+        return {
+          message: item,
+          isFirstInGroup: olderKey !== currentKey,
+          isLastInGroup: newerKey !== currentKey,
+        };
+      }),
+    [messages]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<GroupedMessageRow>) => (
+      <ChatMessageBubble
+        message={item.message}
+        isOwn={item.message.senderType === "USER"}
+        isFirstInGroup={item.isFirstInGroup}
+        isLastInGroup={item.isLastInGroup}
+        onDeleteAttachment={handleDeleteAttachment}
+        onSelectFaqOption={handleSelectFaqOption}
+        onRetryMessage={handleRetry}
+        onToggleReaction={handleToggleReaction}
+        onPreviewImage={handlePreviewImage}
+      />
+    ),
+    [
+      handleDeleteAttachment,
+      handlePreviewImage,
+      handleRetry,
+      handleSelectFaqOption,
+      handleToggleReaction,
+    ]
+  );
+
+  const keyExtractor = useCallback(
+    (row: GroupedMessageRow) => row.message.clientId || row.message.id,
+    []
+  );
+
+  const listEmptyComponent = useMemo(
+    () => (
+      <ChatListEmpty
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={handleRefresh}
+      />
+    ),
+    [error, handleRefresh, isError, isLoading]
+  );
+
   const headerTitle =
     conversation?.subject ?? conversation?.participants[0]?.user?.fullName ?? t("chat.title");
 
   return (
-    <PageLayout testID={testID}>
+    <PageLayout fullBleed dismissKeyboardOnDrag={false} testID={testID}>
       <ChatHeader
         title={headerTitle}
-        onBackPress={vm.navigateBack}
-        isOnline={!isClosed && isNetworkOnline}
+        onBackPress={viewModel.navigateBack}
+        isOnline={isNetworkOnline}
         isRouletteMatch={Boolean(conversation?.isRouletteMatch)}
         subtitle={!isClosed ? headerSubtitle : undefined}
-        onToggleOffline={vm.toggleOfflineMode}
+        onToggleOffline={isClosed ? undefined : viewModel.toggleOfflineMode}
       />
 
       <KeyboardAvoidingView
@@ -100,41 +193,31 @@ export const ChatContentView = memo<{
         keyboardVerticalOffset={0}
       >
         {conversation ? (
-          <ChatRoomContextCard conversation={conversation} onSpinNext={vm.spinNextMatch} />
+          <ChatRoomContextCard conversation={conversation} onSpinNext={viewModel.spinNextMatch} />
         ) : null}
 
         <View style={styles.listContainer}>
           <FlatList
             ref={listRef}
             testID={CHAT_CONTENT_TEST_IDS.FLASH_LIST}
-            data={messages}
-            inverted={messages.length > 0}
+            data={groupedRows}
+            inverted={groupedRows.length > 0}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             contentContainerStyle={
-              messages.length === 0 ? styles.emptyListContent : styles.listContent
+              groupedRows.length === 0 ? styles.emptyListContent : styles.listContent
             }
             showsVerticalScrollIndicator={false}
-            onEndReached={vm.loadMore}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            scrollEventThrottle={100}
+            onEndReached={viewModel.loadMore}
             onEndReachedThreshold={0.5}
             initialNumToRender={10}
             maxToRenderPerBatch={10}
             windowSize={5}
-            removeClippedSubviews
-            ListEmptyComponent={
-              isLoading ? (
-                <View
-                  testID={CHAT_CONTENT_TEST_IDS.LOADING_SPINNER}
-                  style={styles.loadingContainer}
-                >
-                  <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <ChatEmptyState testID={CHAT_CONTENT_TEST_IDS.EMPTY_STATE} />
-                </View>
-              )
-            }
+            ListEmptyComponent={listEmptyComponent}
           />
         </View>
 
@@ -143,21 +226,20 @@ export const ChatContentView = memo<{
         {!isClosed && (!isNetworkOnline || outboundQueueCount > 0 || queueStatus) ? (
           <QueueStatusBanner
             queueStatus={queueStatus}
-            isOffline={!isNetworkOnline || outboundQueueCount > 0}
+            isOffline={!isNetworkOnline}
             pendingCount={outboundQueueCount}
           />
         ) : null}
 
         {!isClosed ? (
-          <ChatFaqOptionsBar
-            onSelectOption={(query) => void vm.sendMessage(query)}
-            disabled={isSending}
-          />
+          <ChatFaqOptionsBar onSelectOption={handleSelectFaqOption} disabled={isSending} />
         ) : null}
 
         {isClosed ? (
-          <View
+          <Animated.View
             testID={CHAT_CONTENT_TEST_IDS.CLOSED_BAR}
+            entering={FADE_DOWN_ENTER}
+            exiting={FADE_DOWN_EXIT}
             style={[
               styles.closedNotice,
               {
@@ -171,20 +253,23 @@ export const ChatContentView = memo<{
                 ? t("chat.resolvedConversation")
                 : t("chat.closedConversation")}
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
 
         <ChatInputBar
           inputText={inputText}
-          onChangeText={vm.setInputText}
-          onSend={(content) => void vm.sendMessage(content)}
-          onSendAudioNote={vm.sendAudioNote}
-          onPickAttachment={() => void vm.pickAttachment()}
-          onRemoveStagedAttachment={vm.removeStagedAttachment}
+          onChangeText={viewModel.setInputText}
+          onSend={handleSendText}
+          onSendAudioNote={viewModel.sendAudioNote}
+          onPickAttachment={handlePickAttachment}
+          onRemoveStagedAttachment={viewModel.removeStagedAttachment}
           stagedAttachments={stagedAttachments}
           isSending={isSending}
+          disabled={isClosed}
         />
       </KeyboardAvoidingView>
+
+      <MessageImageLightbox imageUrl={previewImageUrl} onClose={handleCloseLightbox} />
     </PageLayout>
   );
 });

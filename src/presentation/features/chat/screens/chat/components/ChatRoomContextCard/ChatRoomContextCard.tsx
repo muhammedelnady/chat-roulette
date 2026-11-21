@@ -1,11 +1,13 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo } from "react";
-import { Pressable, View } from "react-native";
+import { memo, useCallback } from "react";
+import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { Text } from "@/src/presentation/components/atoms";
-import { useUI } from "@/src/presentation/hooks";
+import { AnimatedPressable, Text } from "@/src/presentation/components/atoms";
+import { useHaptics, useUI } from "@/src/presentation/hooks";
+import { CSS_EASE_OUT, MOTION_DURATION } from "@/src/presentation/theme";
 
 import { CHAT_ROOM_CONTEXT_CARD_TEST_IDS } from "./ChatRoomContextCard.constants";
 import { styles } from "./ChatRoomContextCard.styles";
@@ -16,75 +18,112 @@ export const ChatRoomContextCard = memo(function ChatRoomContextCard({
   onSpinNext,
   testID = CHAT_ROOM_CONTEXT_CARD_TEST_IDS.ROOT,
 }: ChatRoomContextCardProps) {
-  const { colors, t, isRTL } = useUI();
+  const { colors, shadows, t } = useUI();
+  const haptics = useHaptics();
 
+  const isMatch = Boolean(conversation.isRouletteMatch);
   const topicLabel = conversation.topic ?? t("chat.topicContextTitle");
   const subtitleText = conversation.icebreaker ?? conversation.partnerRole ?? topicLabel;
-  const badgeText = conversation.isRouletteMatch
+  const badgeText = isMatch
     ? (conversation.partnerLocation ?? t("roulette.matchFound"))
     : t("rooms.membersOnline", { count: conversation.participantCount ?? 1 });
 
+  const handleSpinPress = useCallback(() => {
+    void haptics.selection();
+    onSpinNext?.();
+  }, [haptics, onSpinNext]);
+
   return (
-    <View
+    <Animated.View
       testID={testID}
       style={[
         styles.card,
+        shadows.sm,
         {
-          backgroundColor: colors.surfaceElevated,
-          borderColor: colors.borderStrong,
+          backgroundColor: colors.surface,
+          borderColor: isMatch ? colors.borderGlow : colors.border,
+          transitionProperty: "borderColor",
+          transitionDuration: MOTION_DURATION.fast,
+          transitionTimingFunction: CSS_EASE_OUT,
         },
       ]}
     >
-      <View style={[styles.topRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-        <View style={[styles.topicRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-          <Ionicons
-            name={conversation.isRouletteMatch ? "flash" : "layers-outline"}
-            size={15}
-            color={colors.accent}
-          />
-          <Text variant="xs" weight="bold" color={colors.textPrimary} numberOfLines={1}>
-            {topicLabel}
-          </Text>
-        </View>
-        <View style={[styles.badge, { backgroundColor: colors.cyanTint }]}>
-          <Text variant="xs" weight="bold" color={colors.accent}>
-            {badgeText}
-          </Text>
-        </View>
-      </View>
+      <View
+        style={[styles.accentRail, { backgroundColor: isMatch ? colors.accent : colors.primary }]}
+      />
 
-      <View style={[styles.bottomRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-        <Text
-          variant="xs"
-          color={colors.textSecondary}
-          numberOfLines={2}
-          style={styles.icebreakerText}
-        >
-          {subtitleText}
-        </Text>
-
-        {onSpinNext ? (
-          <Pressable
-            testID={CHAT_ROOM_CONTEXT_CARD_TEST_IDS.CTA}
-            onPress={onSpinNext}
-            style={({ pressed }) => [
-              styles.cta,
-              { flexDirection: isRTL ? "row-reverse" : "row" },
-              pressed && { opacity: 0.75 },
+      <View style={styles.innerContent}>
+        <View style={styles.topRow}>
+          <View style={styles.topicRow}>
+            <View
+              style={[
+                styles.topicIconBadge,
+                { backgroundColor: isMatch ? colors.accentTint : colors.primaryTint },
+              ]}
+            >
+              <Ionicons
+                name={isMatch ? "flash" : "layers-outline"}
+                size={13}
+                color={isMatch ? colors.accent : colors.primary}
+              />
+            </View>
+            <Text
+              variant="xs"
+              weight="bold"
+              color={colors.textPrimary}
+              numberOfLines={1}
+              style={styles.topicText}
+            >
+              {topicLabel}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: colors.accentTint, borderColor: colors.accentBorder },
             ]}
           >
-            <Text variant="xs" weight="bold" color={colors.primary}>
-              {t("chat.topicContextCta")}
+            <Text variant="xs" weight="bold" color={colors.accent} style={styles.tabular}>
+              {badgeText}
             </Text>
-            <Ionicons
-              name={isRTL ? "chevron-back" : "chevron-forward"}
-              size={12}
-              color={colors.primary}
-            />
-          </Pressable>
-        ) : null}
+          </View>
+        </View>
+
+        <View style={styles.bottomRow}>
+          <Text
+            variant="xs"
+            color={colors.textSecondary}
+            numberOfLines={2}
+            style={styles.icebreakerText}
+          >
+            {subtitleText}
+          </Text>
+
+          {onSpinNext ? (
+            <AnimatedPressable
+              testID={CHAT_ROOM_CONTEXT_CARD_TEST_IDS.CTA}
+              accessibilityRole="button"
+              accessibilityLabel={t("chat.topicContextCta")}
+              scaleTo={0.96}
+              hitSlop={8}
+              onPress={handleSpinPress}
+              style={[
+                styles.cta,
+                {
+                  backgroundColor: colors.primaryTint,
+                  borderColor: colors.borderGlow,
+                },
+              ]}
+            >
+              <Ionicons name="shuffle" size={12} color={colors.primary} />
+              <Text variant="xs" weight="bold" color={colors.primary}>
+                {t("chat.topicContextCta")}
+              </Text>
+            </AnimatedPressable>
+          ) : null}
+        </View>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 

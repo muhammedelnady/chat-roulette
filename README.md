@@ -19,7 +19,7 @@ npm run verify
 | :--------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Clean Architecture & Result Pattern**  | `src/domain/Result.ts`, `src/domain/entities/Chat.ts`, `src/domain/usecases/chat/`                                                                                                      | `src/domain/Result.test.ts`, `src/domain/usecases/chat/ChatUseCases.test.ts`, `scripts/verify-architecture.sh`, `scripts/verify-result-pattern.sh` |
 | **Dependency Injection Root**            | `src/di/container.ts`, `src/di/UseCasesProvider.tsx`, `src/di/modules/chatModule.ts`, `src/di/bootstrap.ts`                                                                             | `scripts/verify-di.sh`, `eslint.config.js` (`import/no-restricted-paths`)                                                                          |
-| **Offline-First MMKV Outbox**            | `src/data/socket/ChatOutboundQueue.ts`, `src/data/socket/ChatSocketService.ts`, `src/data/cache/mmkvStorage.ts`                                                                         | `src/data/socket/ChatOutboundQueue.test.ts`, `src/data/simulated/SimulatedChatEngine.test.ts`                                                      |
+| **Offline-First MMKV Outbox**            | `src/data/socket/ChatOutboundQueue.ts`, `src/data/socket/ChatSocketService.ts`, `src/infrastructure/storage/mmkvStorage.ts`                                                             | `src/data/socket/ChatOutboundQueue.test.ts`, `src/data/simulated/SimulatedChatEngine.test.ts`                                                      |
 | **Dual-Mode Real-Time Engine**           | `src/data/simulated/SimulatedChatEngine.ts`, `src/data/simulated/SimulatedChatRepositories.ts`, `src/data/repositories/ChatRepositoryImpl.ts`                                           | `src/data/simulated/SimulatedChatEngine.test.ts`, `src/data/mappers/ChatMapper.test.ts`                                                            |
 | **Midnight Pulse UI & Showcase Screens** | `src/presentation/theme/colors.ts`, `src/presentation/features/chat/screens/rooms/`, `src/presentation/features/chat/screens/roulette/`, `src/presentation/features/chat/screens/chat/` | `ChatRoomsContent.test.tsx`, `ChatRouletteContent.test.tsx`, `ChatContent.test.tsx`, `AudioMessageBubble.test.tsx`, `ChatMessageBubble.test.tsx`   |
 | **Bilingual EN / AR RTL Mirroring**      | `src/infrastructure/i18n/translate.ts`, `src/infrastructure/i18n/langs/en.json`, `src/infrastructure/i18n/langs/ar.json`                                                                | `src/infrastructure/i18n/translate.test.ts`, `scripts/validate-i18n.js`                                                                            |
@@ -55,9 +55,9 @@ Recruiters and engineering reviewers can boot the app immediately with `npx expo
 flowchart LR
     UI["Presentation (Screens, ViewModels, Stores)"] -->|"useUseCases() via DI"| UC["Domain (UseCases, Entities, Interfaces, Result)"]
     DI["DI Composition Root (src/di/)"] --> UI
-    DI --> DATA["Data (Repositories, Mappers, Socket, Simulated Engine, MMKV)"]
+    DI --> DATA["Data (Repositories, Mappers, Socket, Simulated Engine)"]
     DATA -->|"implements"| UC
-    INFRA["Infrastructure (i18n, Audio, Haptics, Logger, Query)"] --> DI
+    INFRA["Infrastructure (i18n, Audio, Haptics, Logger, MMKV)"] --> DI
 ```
 
 ### Offline Outbox Lifecycle
@@ -79,8 +79,8 @@ stateDiagram-v2
 
 - **Zero Secrets Committed:** `.env` files, native keystores, Firebase plists, and build artifacts are strictly gitignored.
 - **Automated Secret Scanning:** `.gitleaks.toml` and `.github/workflows/ci.yml` enforce zero credential leaks across both working directory and full git history (`bash scripts/secret-scan.sh`).
-- **Secure Storage Separation:** Auth tokens use `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), while high-throughput caches and outbound queues use encrypted MMKV (`react-native-mmkv`).
-- **Redacted Logging:** `src/data/utils/logger.ts` automatically redacts sensitive keys (`token`, `authorization`, `secret`, `apiKey`) before buffering or printing.
+- **Secure Storage Separation:** Auth tokens and the MMKV master key use `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), while high-throughput caches and outbound queues use AES-256 encrypted MMKV (`react-native-mmkv`).
+- **Redacted Logging:** `src/infrastructure/logging/logger.ts` automatically redacts sensitive keys (`token`, `authorization`, `secret`, `apiKey`, `cookie`) and Bearer strings before printing.
 
 ---
 

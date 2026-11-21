@@ -3,14 +3,9 @@
  * Infrastructure Storage Zustand MMKV Adapter
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StateStorage } from "zustand/middleware";
 
-import {
-  getStorageSync,
-  isUsingFallbackStorage,
-  primeFallbackStorage,
-} from "@/src/data/cache/mmkvStorage";
+import { getStorageSync } from "@/src/infrastructure/storage/mmkvStorage";
 
 export const zustandMMKVStorage: StateStorage = {
   setItem: (name: string, value: string) => {
@@ -19,27 +14,9 @@ export const zustandMMKVStorage: StateStorage = {
     } catch {}
   },
 
-  getItem: (name: string): string | null | Promise<string | null> => {
+  getItem: (name: string): string | null => {
     try {
-      const syncVal = getStorageSync().getString(name);
-      if (syncVal !== undefined) {
-        return syncVal;
-      }
-      if (isUsingFallbackStorage()) {
-        return AsyncStorage.getItem(name)
-          .then((asyncVal) => {
-            const latestSyncVal = getStorageSync().getString(name);
-            if (latestSyncVal !== undefined) {
-              return latestSyncVal;
-            }
-            if (asyncVal !== null) {
-              primeFallbackStorage(name, asyncVal);
-            }
-            return asyncVal;
-          })
-          .catch(() => null);
-      }
-      return null;
+      return getStorageSync().getString(name) ?? null;
     } catch {
       return null;
     }

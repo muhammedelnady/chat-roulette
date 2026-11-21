@@ -5,6 +5,64 @@
 
 import { consoleTransport, logger as rnLogger } from "react-native-logs";
 
+const REDACT_KEYS = new Set([
+  "password",
+  "token",
+  "authorization",
+  "refreshtoken",
+  "accesstoken",
+  "secret",
+  "apikey",
+  "api_key",
+  "cookie",
+  "set-cookie",
+  "x-guest-session-id",
+  "guestsessionid",
+  "bearer",
+  "x-api-key",
+  "encryptionkey",
+]);
+
+function redactString(input: string): string {
+  const bearerRedacted = input.replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, "Bearer [REDACTED]");
+  const trimmed = bearerRedacted.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      const parsed: unknown = JSON.parse(bearerRedacted);
+      if (typeof parsed === "object" && parsed !== null) {
+        return JSON.stringify(redact(parsed));
+      }
+    } catch {}
+  }
+  return bearerRedacted;
+}
+
+function redact(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+  if (typeof value === "string") {
+    return redactString(value);
+  }
+  if (value instanceof Error) {
+    return { name: value.name, message: redactString(value.message), stack: value.stack };
+  }
+  if (typeof value !== "object" || value === null) return value;
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => redact(item, seen));
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+      k,
+      REDACT_KEYS.has(k.toLowerCase()) ? "[REDACTED]" : redact(v, seen),
+    ])
+  );
+}
+
 const APP_LEVELS = {
   silly: 0,
   debug: 1,
@@ -66,41 +124,62 @@ class Logger implements AppLogger {
     return Logger.instance;
   }
 
+  private shouldLog(level: AppLevel): boolean {
+    const current = this.getSeverity();
+    return APP_LEVELS[level] >= APP_LEVELS[current];
+  }
+
   private fmt(message: unknown): string {
     if (message instanceof Error) {
-      const errMsg = message.stack ? `${message.message}\n${message.stack}` : message.message;
+      const cleanMessage = redactString(message.message);
+      const errMsg = message.stack ? `${cleanMessage}\n${message.stack}` : cleanMessage;
       return this.prefix ? `[${this.prefix}] ${errMsg}` : errMsg;
     }
-    const msg = typeof message === "string" ? message : JSON.stringify(message);
+    let msg: string;
+    if (typeof message === "string") {
+      msg = redactString(message);
+    } else {
+      try {
+        msg = JSON.stringify(redact(message));
+      } catch {
+        msg = "[Unserializable]";
+      }
+    }
     return this.prefix ? `[${this.prefix}] ${msg}` : msg;
   }
 
+  private write(level: AppLevel, message: unknown, params: unknown[]): void {
+    if (!this.shouldLog(level)) return;
+    this.rn[level](this.fmt(message), ...params.map((item) => redact(item)));
+  }
+
   public silly(message: unknown, ...params: unknown[]): void {
-    this.rn.silly(this.fmt(message), ...params);
+    this.write("silly", message, params);
   }
 
   public debug(message: unknown, ...params: unknown[]): void {
-    this.rn.debug(this.fmt(message), ...params);
+    this.write("debug", message, params);
   }
 
   public info(message: unknown, ...params: unknown[]): void {
-    this.rn.info(this.fmt(message), ...params);
+    this.write("info", message, params);
   }
 
   public warn(message: unknown, ...params: unknown[]): void {
-    this.rn.warn(this.fmt(message), ...params);
+    this.write("warn", message, params);
   }
 
   public error(message: unknown, ...params: unknown[]): void {
-    this.rn.error(this.fmt(message), ...params);
+    this.write("error", message, params);
   }
 
   public exception(error: unknown, message?: string): void {
-    const header = message ? `${message} — ` : "";
+    if (!this.shouldLog("error")) return;
+    const header = message ? `${redactString(message)} — ` : "";
     if (error instanceof Error) {
-      this.rn.error(this.fmt(`${header}${error.name}: ${error.message}`));
+      this.rn.error(this.fmt(`${header}${error.name}: ${redactString(error.message)}`));
     } else {
-      this.rn.error(this.fmt(`${header}${String(error)}`));
+      this.rn.error(this.fmt(`${header}${redactString(String(error))}`));
     }
   }
 
@@ -108,17 +187,34 @@ class Logger implements AppLogger {
     const parent = this;
     const tag = (msg: unknown) => {
       if (msg instanceof Error) {
-        return parent.fmt(`[${prefix}] ${msg.message}`);
+        return `[${prefix}] ${redactString(msg.message)}`;
       }
-      return parent.fmt(`[${prefix}] ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
+      if (typeof msg === "string") {
+        return `[${prefix}] ${redactString(msg)}`;
+      }
+      try {
+        return `[${prefix}] ${JSON.stringify(redact(msg))}`;
+      } catch {
+        return `[${prefix}] [Unserializable]`;
+      }
     };
 
     return {
-      silly: (msg, ...p) => parent.rn.silly(tag(msg), ...p),
-      debug: (msg, ...p) => parent.rn.debug(tag(msg), ...p),
-      info: (msg, ...p) => parent.rn.info(tag(msg), ...p),
-      warn: (msg, ...p) => parent.rn.warn(tag(msg), ...p),
-      error: (msg, ...p) => parent.rn.error(tag(msg), ...p),
+      silly: (msg, ...p) => {
+        if (parent.shouldLog("silly")) parent.silly(tag(msg), ...p);
+      },
+      debug: (msg, ...p) => {
+        if (parent.shouldLog("debug")) parent.debug(tag(msg), ...p);
+      },
+      info: (msg, ...p) => {
+        if (parent.shouldLog("info")) parent.info(tag(msg), ...p);
+      },
+      warn: (msg, ...p) => {
+        if (parent.shouldLog("warn")) parent.warn(tag(msg), ...p);
+      },
+      error: (msg, ...p) => {
+        if (parent.shouldLog("error")) parent.error(tag(msg), ...p);
+      },
       exception: (err, msg) => parent.exception(err, msg ? `[${prefix}] ${msg}` : `[${prefix}]`),
       createChild: (child) => parent.createChild(`${prefix}:${child}`),
       setSeverity: (level) => parent.setSeverity(level),
@@ -131,7 +227,9 @@ class Logger implements AppLogger {
   }
 
   public getSeverity(): AppLevel {
-    return this.rn.getSeverity() as AppLevel;
+    return typeof this.rn.getSeverity === "function"
+      ? (this.rn.getSeverity() as AppLevel)
+      : "debug";
   }
 }
 

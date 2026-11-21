@@ -10,7 +10,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   emptyListContent: {
     paddingVertical: 12,
@@ -26,6 +26,12 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 32,
+  },
+  errorCard: {
+    padding: 20,
+    alignItems: "center",
+    gap: 12,
+    maxWidth: 320,
   },
   closedNotice: {
     paddingVertical: 12,

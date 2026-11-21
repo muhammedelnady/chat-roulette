@@ -6,18 +6,25 @@
 import type { Socket } from "socket.io-client";
 import { io } from "socket.io-client";
 
-import { getStorageSync } from "@/src/data/cache/mmkvStorage";
 import type { IConnectivityChecker, ITokensStorage } from "@/src/domain/repositories";
 import { isOk } from "@/src/domain/Result";
 import type { ChatSocketLogger, IChatSocketService } from "@/src/domain/services";
+import { getStorageSync } from "@/src/infrastructure/storage/mmkvStorage";
 
 import { ChatOutboundQueue, type QueuedMessage } from "./ChatOutboundQueue";
+
+const LOCAL_ONLY_EVENTS = new Set(["reconnect", "queue:updated", "message:failed"]);
+const ACK_TIMEOUT_MS = 15_000;
 
 export class ChatSocketService implements IChatSocketService {
   private socket: Socket | null = null;
   private activeConversationId: string | null = null;
   private outboundQueue: ChatOutboundQueue;
   private listeners: { event: string; handler: (...args: unknown[]) => void }[] = [];
+  private connectPromise: Promise<void> | null = null;
+  private handleManagerReconnect: ((attempt: number) => void) | null = null;
+  private unsubscribeConnectivity: (() => void) | null = null;
+  private pendingAckTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     private readonly apiUrl: string,
@@ -34,9 +41,46 @@ export class ChatSocketService implements IChatSocketService {
   }
 
   private subscribeToConnectivity(): void {
-    this.connectivity?.observeConnectivity?.((isConnected) => {
-      if (isConnected) this.drainBuffer();
-    });
+    this.unsubscribeConnectivity =
+      this.connectivity?.observeConnectivity?.((isConnected) => {
+        if (!isConnected) return;
+        if (this.socket && !this.socket.connected) {
+          this.socket.connect();
+        } else {
+          this.drainBuffer();
+        }
+      }) ?? null;
+  }
+
+  private emitLocal(event: string, payload: unknown): void {
+    for (const listener of [...this.listeners]) {
+      if (listener.event === event) {
+        try {
+          listener.handler(payload);
+        } catch (err) {
+          this.logger.error(`[ChatSocket] Listener error for ${event}:`, err);
+        }
+      }
+    }
+  }
+
+  private emitQueueCount(): void {
+    this.emitLocal("queue:updated", { count: this.outboundQueue.size });
+  }
+
+  private clearAckTimer(clientId: string): void {
+    const timer = this.pendingAckTimers.get(clientId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingAckTimers.delete(clientId);
+    }
+  }
+
+  private clearAllAckTimers(): void {
+    for (const timer of this.pendingAckTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingAckTimers.clear();
   }
 
   getPendingQueueCount(): number {
@@ -44,7 +88,20 @@ export class ChatSocketService implements IChatSocketService {
   }
 
   async connect(token?: string, guestSessionId?: string): Promise<void> {
-    let resolvedToken = token;
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+    this.connectPromise = this.connectInternal(token, guestSessionId).finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
+  }
+
+  private async resolveCredentials(
+    explicitToken?: string,
+    explicitGuest?: string
+  ): Promise<{ token?: string; guestSessionId?: string }> {
+    let resolvedToken = explicitToken;
     const storage = this.tokenStorage;
     if (!resolvedToken && storage) {
       try {
@@ -63,7 +120,7 @@ export class ChatSocketService implements IChatSocketService {
     }
 
     const resolvedGuest =
-      guestSessionId ??
+      explicitGuest ??
       (() => {
         try {
           return getStorageSync().getString("@chat_guest_session_id") ?? undefined;
@@ -72,15 +129,36 @@ export class ChatSocketService implements IChatSocketService {
         }
       })();
 
-    if (this.socket?.connected) {
-      const opts = this.socket.io.opts as {
-        auth?: { token?: string; guestSessionId?: string };
-      };
-      const currentToken = opts.auth?.token;
-      const currentGuest = opts.auth?.guestSessionId;
-      if (currentToken === resolvedToken && currentGuest === resolvedGuest) return;
+    return { token: resolvedToken, guestSessionId: resolvedGuest };
+  }
 
-      opts.auth = {
+  private teardownSocket(): void {
+    this.clearAllAckTimers();
+    if (!this.socket) return;
+    if (this.handleManagerReconnect) {
+      this.socket.io.off("reconnect", this.handleManagerReconnect);
+      this.handleManagerReconnect = null;
+    }
+    this.socket.off();
+    this.socket.disconnect();
+    this.socket = null;
+  }
+
+  private async connectInternal(token?: string, guestSessionId?: string): Promise<void> {
+    const { token: resolvedToken, guestSessionId: resolvedGuest } = await this.resolveCredentials(
+      token,
+      guestSessionId
+    );
+
+    if (this.socket?.connected) {
+      const currentAuth =
+        typeof this.socket.auth === "object"
+          ? (this.socket.auth as { token?: string; guestSessionId?: string })
+          : undefined;
+      if (currentAuth?.token === resolvedToken && currentAuth?.guestSessionId === resolvedGuest) {
+        return;
+      }
+      this.socket.auth = {
         token: resolvedToken ?? undefined,
         guestSessionId: resolvedGuest,
       };
@@ -89,26 +167,28 @@ export class ChatSocketService implements IChatSocketService {
       return;
     }
 
-    if (this.socket) {
-      this.socket.off();
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    this.teardownSocket();
 
-    const baseUrl = this.apiUrl.replace(/\/api\/v1$/, "").replace(/\/$/, "");
+    const baseUrl = this.apiUrl.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
 
     this.socket = io(baseUrl, {
       path: "/ws/chat",
-      auth: {
-        token: resolvedToken ?? undefined,
-        guestSessionId: resolvedGuest,
+      forceNew: true,
+      auth: (cb) => {
+        void this.resolveCredentials(token, guestSessionId).then((creds) => cb(creds));
       },
       transports: ["websocket"],
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 15_000,
     });
+
+    this.socket.auth = {
+      token: resolvedToken ?? undefined,
+      guestSessionId: resolvedGuest,
+    };
 
     this.socket.on("connect", () => {
       this.logger.info("[ChatSocket] Connected");
@@ -120,13 +200,24 @@ export class ChatSocketService implements IChatSocketService {
 
     this.socket.on("message:delivered", (data: { clientId?: string }) => {
       if (!data.clientId) return;
-      this.outboundQueue.removeDelivered(data.clientId);
+      this.clearAckTimer(data.clientId);
+      if (this.outboundQueue.removeDelivered(data.clientId)) {
+        this.emitQueueCount();
+      }
     });
 
     this.socket.on("error", (data: { clientId?: string; message?: string }) => {
       const clientId = data.clientId;
       if (!clientId) return;
-      this.outboundQueue.markDeliveryFailed(clientId);
+      this.clearAckTimer(clientId);
+      const updated = this.outboundQueue.markDeliveryFailed(clientId);
+      this.emitQueueCount();
+      if (updated?.status === "FAILED") {
+        this.emitLocal("message:failed", {
+          conversationId: updated.conversationId,
+          clientId: updated.clientId,
+        });
+      }
     });
 
     this.socket.on("disconnect", (reason) => {
@@ -137,44 +228,40 @@ export class ChatSocketService implements IChatSocketService {
       this.logger.error("[ChatSocket] Connection error:", err.message);
     });
 
-    this.socket.io.on("reconnect", (attempt) => {
+    this.handleManagerReconnect = (attempt: number) => {
       this.logger.info("[ChatSocket] Reconnected after", attempt, "attempt(s)");
-      if (this.activeConversationId) {
-        this.socket?.emit("conversation:join", this.activeConversationId);
-      }
-      this.drainBuffer();
-      for (const listener of this.listeners) {
-        if (listener.event === "reconnect") {
-          try {
-            listener.handler(attempt);
-          } catch (err) {
-            this.logger.error("[ChatSocket] Reconnect listener error:", err);
-          }
-        }
-      }
-    });
+      this.emitLocal("reconnect", attempt);
+    };
+    this.socket.io.on("reconnect", this.handleManagerReconnect);
 
     this.reSubscribeListeners();
   }
 
   private drainBuffer(): void {
     if (!this.socket?.connected || !this.isAppOnline()) return;
-    this.outboundQueue.drain((event, payload) => this.socket?.emit(event, payload));
+    this.outboundQueue.drain((event, payload) => {
+      this.socket?.emit(event, payload);
+    });
+    this.emitQueueCount();
   }
 
   private reSubscribeListeners(): void {
     for (const { event, handler } of this.listeners) {
-      this.socket?.on(event, handler);
+      if (!LOCAL_ONLY_EVENTS.has(event)) {
+        this.socket?.on(event, handler);
+      }
     }
   }
 
   disconnect(): void {
-    if (this.socket) {
-      this.activeConversationId = null;
-      this.socket.off();
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    this.activeConversationId = null;
+    this.teardownSocket();
+  }
+
+  dispose(): void {
+    this.disconnect();
+    this.unsubscribeConnectivity?.();
+    this.unsubscribeConnectivity = null;
   }
 
   isConnected(): boolean {
@@ -219,9 +306,28 @@ export class ChatSocketService implements IChatSocketService {
         retryCount: 0,
       };
       this.outboundQueue.enqueue(queuedMessage);
+      this.emitQueueCount();
       this.logger.warn("[ChatSocket] Buffered outbound message in MMKV");
       return;
     }
+
+    this.clearAckTimer(data.clientId);
+    const timer = setTimeout(() => {
+      this.pendingAckTimers.delete(data.clientId);
+      this.outboundQueue.enqueue({
+        ...data,
+        status: "PENDING",
+        createdAt: Date.now(),
+        retryCount: 1,
+      });
+      this.emitQueueCount();
+      this.emitLocal("message:failed", {
+        conversationId: data.conversationId,
+        clientId: data.clientId,
+      });
+    }, ACK_TIMEOUT_MS);
+    this.pendingAckTimers.set(data.clientId, timer);
+
     this.socket.emit("message:send", data);
   }
 
@@ -235,29 +341,44 @@ export class ChatSocketService implements IChatSocketService {
   }
 
   startTyping(conversationId: string): void {
-    this.socket?.emit("typing:start", conversationId);
+    if (!this.socket?.connected) return;
+    this.socket.emit("typing:start", conversationId);
   }
 
   stopTyping(conversationId: string): void {
-    this.socket?.emit("typing:stop", conversationId);
+    if (!this.socket?.connected) return;
+    this.socket.emit("typing:stop", conversationId);
   }
 
   markMessageRead(conversationId: string, messageId: string): void {
-    this.socket?.emit("message:read", { conversationId, messageId });
+    if (!this.socket?.connected) return;
+    this.socket.emit("message:read", { conversationId, messageId });
   }
 
   onEvent(event: string, handler: (...args: unknown[]) => void): void {
-    this.listeners.push({ event, handler });
-    this.socket?.on(event, handler);
+    const exists = this.listeners.some((l) => l.event === event && l.handler === handler);
+    if (!exists) {
+      this.listeners.push({ event, handler });
+      if (!LOCAL_ONLY_EVENTS.has(event)) {
+        this.socket?.on(event, handler);
+      }
+    }
   }
 
   offEvent(event: string, handler?: (...args: unknown[]) => void): void {
     if (handler) {
       this.listeners = this.listeners.filter((l) => !(l.event === event && l.handler === handler));
-      this.socket?.off(event, handler);
+      if (!LOCAL_ONLY_EVENTS.has(event)) {
+        this.socket?.off(event, handler);
+      }
     } else {
+      const removed = this.listeners.filter((l) => l.event === event);
       this.listeners = this.listeners.filter((l) => l.event !== event);
-      this.socket?.off(event);
+      if (!LOCAL_ONLY_EVENTS.has(event)) {
+        for (const l of removed) {
+          this.socket?.off(event, l.handler);
+        }
+      }
     }
   }
 }

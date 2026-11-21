@@ -15,7 +15,7 @@ export function translate(
 
   const getByPath = (obj: NestedRecord, path: string): unknown => {
     return path.split(".").reduce<unknown>((acc, part) => {
-      if (acc && typeof acc === "object" && part in acc) {
+      if (acc && typeof acc === "object" && Object.prototype.hasOwnProperty.call(acc, part)) {
         return (acc as NestedRecord)[part];
       }
       return undefined;
