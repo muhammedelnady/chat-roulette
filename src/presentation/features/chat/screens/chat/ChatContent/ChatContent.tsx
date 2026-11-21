@@ -6,6 +6,7 @@ import {
   type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -189,8 +190,8 @@ export const ChatContentView = memo<{
 
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
-        behavior="padding"
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        automaticOffset
       >
         {conversation ? (
           <ChatRoomContextCard conversation={conversation} onSpinNext={viewModel.spinNextMatch} />
