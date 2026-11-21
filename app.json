@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Chat Roulette",
+    "slug": "chat-roulette",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/images/png/icon.png",
+    "scheme": "chatroulette",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.muhammedelnady.chatroulette",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Chat Roulette needs access to your photo library to share images in rooms.",
+        "NSCameraUsageDescription": "Chat Roulette needs access to your camera to capture photos for chat rooms.",
+        "NSMicrophoneUsageDescription": "Chat Roulette needs access to your microphone to record voice notes.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#07080D",
+        "foregroundImage": "./src/assets/images/png/android-icon-foreground.png"
+      },
+      "permissions": ["android.permission.RECORD_AUDIO"],
+      "predictiveBackGestureEnabled": false,
+      "package": "com.muhammedelnady.chatroulette"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./src/assets/images/png/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#07080D",
+          "dark": {
+            "image": "./src/assets/images/png/splash-icon.png",
+            "backgroundColor": "#07080D"
+          }
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-audio"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

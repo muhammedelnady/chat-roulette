@@ -1,0 +1,87 @@
+# Environment variables (NEVER commit local env files)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Expo & React Native
+.expo/
+.expo-shared/
+dist/
+dist-*/
+dist-export-*/
+web-build/
+expo-env.d.ts
+.eas/
+eas.json.local
+.expo-cli/
+
+# Native Build Artifacts
+/android/
+/ios/
+*.apk
+*.aab
+*.ipa
+*.app/
+*.app
+*.dSYM.zip
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.keystore
+
+# Firebase & Certificates
+google-services.json
+GoogleService-Info.plist
+*.pem
+*.crt
+*.cert
+*.pfx
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+junit.xml
+test-results/
+reports/
+
+# Logs & Caches
+logs/
+*.log
+*.tsbuildinfo
+.eslintcache
+tmp/
+temp/
+.tmp/
+.temp/
+
+# OS & Editors
+.DS_Store
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Husky
+.husky/_/
+
+# AI Agent Scratchpads
+.claude/
+.codex/
+.kiro/
+scratch/

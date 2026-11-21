@@ -1,0 +1,35 @@
+/** @format */
+
+import type { SpacingTokens } from "./types";
+
+export const spacing: SpacingTokens = {
+  0: 0,
+  2: 2,
+  4: 4,
+  6: 6,
+  8: 8,
+  10: 10,
+  12: 12,
+  14: 14,
+  16: 16,
+  20: 20,
+  24: 24,
+  28: 28,
+  32: 32,
+  40: 40,
+  48: 48,
+  56: 56,
+  64: 64,
+  80: 80,
+  96: 96,
+  112: 112,
+  128: 128,
+  200: 200,
+  300: 300,
+  350: 350,
+  screenPad: 14,
+  cardPad: 14,
+  cardRadius: 14,
+  sectionGap: 14,
+  itemGap: 8,
+};
