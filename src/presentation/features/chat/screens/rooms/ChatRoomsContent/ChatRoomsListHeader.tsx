@@ -68,14 +68,22 @@ export const ChatRoomsListHeader = memo<ChatRoomsListHeaderProps>(
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <View style={styles.brandCluster}>
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.brandEmblem, shadows.glowPrimary]}
+              <View
+                style={[
+                  styles.brandEmblemContainer,
+                  shadows.glowPrimary,
+                  { backgroundColor: colors.primary },
+                ]}
               >
-                <Ionicons name="radio" size={18} color={colors.textOnPrimary} />
-              </LinearGradient>
+                <LinearGradient
+                  colors={gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.brandEmblem}
+                >
+                  <Ionicons name="radio" size={18} color={colors.textOnPrimary} />
+                </LinearGradient>
+              </View>
               <View style={styles.brandTextGroup}>
                 <Text
                   variant="2xl"

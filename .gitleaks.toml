@@ -3,5 +3,5 @@
 useDefault = true
 
 [[allowlists]]
-description = "Synthetic test fixtures in setupTests.ts and unit tests"
-paths = ['''^setupTests\.ts$''', '''\.test\.(ts|tsx)$''']
+description = "Synthetic test fixtures and generated native folders"
+paths = ['''^setupTests\.ts$''', '''\.test\.(ts|tsx)$''', '''^ios/''', '''^android/''']

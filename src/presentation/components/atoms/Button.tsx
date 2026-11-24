@@ -66,7 +66,7 @@ const getBackgroundColor = (
   hasGradient: boolean,
   colors: ColorTokens
 ): string => {
-  if (hasGradient && !disabled) return "transparent";
+  if (hasGradient && !disabled) return colors.primary;
   if (disabled) return colors.surfaceElevated;
 
   switch (variant) {

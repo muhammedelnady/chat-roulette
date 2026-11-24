@@ -198,7 +198,7 @@ export const ChatMessageBubble = memo<ChatMessageBubbleProps>(
               shadows.sm,
               bubbleRadiusStyle,
               isOwn
-                ? styles.ownBubbleShell
+                ? [styles.ownBubbleShell, { backgroundColor: colors.primary }]
                 : {
                     backgroundColor: colors.surface,
                     borderWidth: 1,

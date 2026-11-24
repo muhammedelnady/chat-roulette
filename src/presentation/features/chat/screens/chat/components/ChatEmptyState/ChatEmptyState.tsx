@@ -62,6 +62,7 @@ export const ChatEmptyState = memo<ChatEmptyStateProps>(
         <Animated.View
           style={[
             styles.outerHalo,
+            shadows.glowPrimary,
             { backgroundColor: colors.primaryTint2, borderColor: colors.borderSubtle },
             haloStyle,
           ]}
@@ -70,7 +71,7 @@ export const ChatEmptyState = memo<ChatEmptyStateProps>(
             colors={gradients.radarGlow}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.iconBorderRing, shadows.glowPrimary]}
+            style={styles.iconBorderRing}
           >
             <View
               testID={CHAT_EMPTY_STATE_TEST_IDS.ICON_CONTAINER}

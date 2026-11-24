@@ -218,7 +218,11 @@ export const ChatInputBar = memo<ChatInputBarProps>(
                     scaleTo={0.95}
                     onPress={handleMicPress}
                     disabled={isSending}
-                    style={[styles.sendButton, shadows.glowPrimary]}
+                    style={[
+                      styles.sendButton,
+                      shadows.glowPrimary,
+                      { backgroundColor: colors.primary },
+                    ]}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <LinearGradient
@@ -246,7 +250,7 @@ export const ChatInputBar = memo<ChatInputBarProps>(
                       styles.sendButton,
                       canSend ? shadows.glowPrimary : null,
                       {
-                        backgroundColor: canSend ? "transparent" : colors.surfaceElevated,
+                        backgroundColor: canSend ? colors.primary : colors.surfaceElevated,
                         borderWidth: canSend ? 0 : 1,
                         borderColor: colors.border,
                       },

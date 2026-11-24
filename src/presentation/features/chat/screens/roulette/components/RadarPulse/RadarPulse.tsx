@@ -262,12 +262,18 @@ export const RadarPulse = memo<RadarPulseProps>(
           </Animated.View>
 
           <Animated.View style={[styles.orbOuterHalo, { borderColor: activeColor }, haloStyle]}>
-            <Animated.View style={orbStyle}>
+            <Animated.View
+              style={[
+                orbStyle,
+                isMatched ? shadows.glowAccent : shadows.glowPrimary,
+                { borderRadius: 44, backgroundColor: isMatched ? colors.accent : colors.primary },
+              ]}
+            >
               <LinearGradient
                 colors={orbGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={[styles.centerOrb, isMatched ? shadows.glowAccent : shadows.glowPrimary]}
+                style={styles.centerOrb}
               >
                 <Ionicons
                   name={isMatched ? "checkmark-done" : isScanning ? "radio" : "shuffle"}

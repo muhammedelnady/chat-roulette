@@ -156,7 +156,7 @@ export const AudioRecordingTray = React.memo(function AudioRecordingTray({
         accessibilityLabel={t("chat.sendRecording")}
         scaleTo={0.95}
         onPress={onSendRecording}
-        style={[styles.sendButton, shadows.glowPrimary]}
+        style={[styles.sendButton, shadows.glowPrimary, { backgroundColor: colors.primary }]}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <LinearGradient

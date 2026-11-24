@@ -6,7 +6,6 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 
 import { ErrorBoundary } from "@/src/presentation/components/error-boundary";
 import { useConnectivityStore } from "@/src/presentation/stores/useConnectivityStore";
@@ -63,7 +62,6 @@ export function AppProviders({ children }: AppProvidersProps) {
           <GestureHandlerRootView
             style={[styles.root, { direction, backgroundColor: colors[themeMode].background }]}
           >
-            <ReducedMotionConfig mode={ReduceMotion.System} />
             <StatusBar style={isDark ? "light" : "dark"} />
             <ThemeProvider value={currentTheme}>{children}</ThemeProvider>
           </GestureHandlerRootView>

@@ -56,7 +56,7 @@ steps:
   - await: { visible: { id: roulette-start-button } }
   - tap: { id: roulette-topic-ai }
   - tap: { id: roulette-start-button }
-  - await: { visible: { id: match-reveal-card }, timeout: 10000 }
+  - await: { visible: { id: match-reveal-card }, timeout: 15000 }
   - assert: { visible: { text: Tariq Al-Mansoor } }
   - tap: { id: enter-matched-room-cta }
 

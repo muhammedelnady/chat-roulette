@@ -19,6 +19,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     gap: 11,
   },
+  brandEmblemContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    borderCurve: "continuous",
+  },
   brandEmblem: {
     width: 40,
     height: 40,
