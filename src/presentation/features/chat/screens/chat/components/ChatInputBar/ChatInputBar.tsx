@@ -42,7 +42,7 @@ export const ChatInputBar = memo<ChatInputBarProps>(
     placeholder,
     testID = CHAT_INPUT_BAR_TEST_IDS.ROOT,
   }) => {
-    const { colors, shadows, t, isRTL } = useUI();
+    const { colors, shadows, t, isRTL, isDark } = useUI();
     const haptics = useHaptics();
     const [isFocused, setIsFocused] = useState(false);
     const recordingLockRef = useRef(false);
@@ -188,6 +188,7 @@ export const ChatInputBar = memo<ChatInputBarProps>(
                 <TextInput
                   testID={CHAT_INPUT_BAR_TEST_IDS.INPUT}
                   accessibilityLabel={t("chat.inputPlaceholder")}
+                  keyboardAppearance={isDark ? "dark" : "light"}
                   value={inputText}
                   onChangeText={onChangeText}
                   onFocus={handleFocus}

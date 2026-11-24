@@ -1,7 +1,7 @@
 /** @format */
 
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { ActivityIndicator, FlatList, type ListRenderItemInfo, View } from "react-native";
 import Animated from "react-native-reanimated";
 
@@ -38,9 +38,20 @@ const ChatRoomsContentView = memo<{
     void viewModel.refresh();
   }, [viewModel]);
 
+  const flatListRef = useRef<FlatList<ChatConversationEntity>>(null);
+
+  const handleSearchFocus = useCallback((y: number) => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({
+        offset: Math.max(0, y - 10),
+        animated: true,
+      });
+    }, 100);
+  }, []);
+
   const listHeaderComponent = useMemo(
-    () => <ChatRoomsListHeader viewModel={viewModel} />,
-    [viewModel]
+    () => <ChatRoomsListHeader viewModel={viewModel} onSearchFocus={handleSearchFocus} />,
+    [viewModel, handleSearchFocus]
   );
 
   const listEmptyComponent = useMemo(() => {
@@ -145,6 +156,7 @@ const ChatRoomsContentView = memo<{
   return (
     <PageLayout testID={testID}>
       <FlatList
+        ref={flatListRef}
         testID={CHAT_ROOMS_TEST_IDS.LIST}
         data={viewModel.rooms}
         renderItem={renderItem}
@@ -154,6 +166,8 @@ const ChatRoomsContentView = memo<{
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         refreshing={viewModel.isRefreshing}
         onRefresh={handleRefresh}
         windowSize={5}
