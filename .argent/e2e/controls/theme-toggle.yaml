@@ -1,0 +1,10 @@
+version: 1
+steps:
+  - echo: Test Midnight and Glass theme toggle and restore default Midnight theme
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: control-theme-toggle }, timeout: 15000 }
+  - assert: { text: { in: { id: control-theme-toggle }, contains: Midnight } }
+  - tap: { id: control-theme-toggle }
+  - await: { text: { in: { id: control-theme-toggle }, contains: Glass } }
+  - tap: { id: control-theme-toggle }
+  - await: { text: { in: { id: control-theme-toggle }, contains: Midnight } }

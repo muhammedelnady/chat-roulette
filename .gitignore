@@ -57,6 +57,7 @@ coverage/
 junit.xml
 test-results/
 reports/
+e2e-artifacts/
 
 # Logs & Caches
 logs/

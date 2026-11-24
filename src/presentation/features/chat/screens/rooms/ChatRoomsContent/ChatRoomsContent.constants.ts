@@ -16,6 +16,7 @@ export const CHAT_ROOMS_TEST_IDS = {
   ERROR_STATE: "chat-rooms-error-state",
   RETRY_BUTTON: "chat-rooms-retry-button",
   LOADING_SPINNER: "chat-rooms-loading-spinner",
+  CATEGORIES_SCROLL: "chat-rooms-categories-scroll",
   CATEGORY_CHIP: (cat: ChatRoomCategory) => `category-chip-${cat}`,
 } as const;
 

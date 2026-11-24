@@ -85,6 +85,7 @@ export const RecruiterControlBar = memo<RecruiterControlBarProps>(
           </View>
           {outboundQueueCount > 0 ? (
             <Animated.View
+              testID="control-queue-badge"
               entering={SOFT_POP_ENTER}
               exiting={SOFT_POP_EXIT}
               style={[

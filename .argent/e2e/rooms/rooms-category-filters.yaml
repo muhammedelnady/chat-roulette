@@ -1,0 +1,26 @@
+version: 1
+steps:
+  - echo: Test room category filter chips
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: category-chip-ALL }, timeout: 15000 }
+  - assert: { visible: { id: room-card-room-rn-architecture } }
+  - tap: { id: category-chip-TECH }
+  - await: { hidden: { id: room-card-roulette-sarah } }
+  - assert: { visible: { id: room-card-room-rn-architecture } }
+  - tap: { id: category-chip-DESIGN }
+  - await: { visible: { id: room-card-room-ui-motion } }
+  - assert: { hidden: { id: room-card-room-rn-architecture } }
+  - tap: { id: category-chip-FOUNDERS }
+  - await: { visible: { id: room-card-room-founders } }
+  - scroll-to:
+      target: { id: category-chip-ROULETTE }
+      direction: right
+      within: { id: chat-rooms-categories-scroll }
+  - tap: { id: category-chip-ROULETTE }
+  - await: { visible: { id: room-card-roulette-sarah } }
+  - scroll-to:
+      target: { id: category-chip-ALL }
+      direction: left
+      within: { id: chat-rooms-categories-scroll }
+  - tap: { id: category-chip-ALL }
+  - await: { visible: { id: room-card-room-rn-architecture } }

@@ -1,0 +1,19 @@
+version: 1
+steps:
+  - echo: Test EN and AR RTL language switch across screens and restore English
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: control-language-toggle }, timeout: 15000 }
+  - assert: { visible: { text: Pulse Rooms } }
+  - assert: { text: { in: { id: control-language-toggle }, contains: "AR / RTL" } }
+  - tap: { id: control-language-toggle }
+  - await: { visible: { text: غرف النبض } }
+  - assert: { text: { in: { id: control-language-toggle }, contains: "EN / LTR" } }
+  - tap: { id: room-card-room-rn-architecture }
+  - await: { visible: { id: chat-header-back-button } }
+  - assert: { visible: { text: افتتاحيات سريعة } }
+  - tap: { id: chat-header-back-button }
+  - await: { hidden: { id: chat-header-back-button } }
+  - await: { visible: { id: control-language-toggle } }
+  - tap: { id: control-language-toggle }
+  - await: { visible: { text: Pulse Rooms } }
+  - assert: { text: { in: { id: control-language-toggle }, contains: "AR / RTL" } }

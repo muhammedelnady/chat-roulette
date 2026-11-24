@@ -1,0 +1,34 @@
+version: 1
+steps:
+  - echo: Buffer outbound message while Offline Sim is active and flush when Online
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: chat-rooms-search-input }, timeout: 15000 }
+  - tap: { id: category-chip-FOUNDERS }
+  - await: { visible: { id: room-card-room-founders } }
+  - tap: { id: room-card-room-founders }
+  - await: { visible: { id: chat-header-network-toggle } }
+  - tap: { id: chat-header-network-toggle }
+  - await: { visible: { id: queue-status-banner } }
+  - assert: { visible: { text: Offline Outbox Active } }
+  - tap: { id: chat-input-text }
+  - tool: fill
+    delayMs: 500
+    args:
+      text: "E2E queued offline message"
+  - await: { visible: { id: chat-send-button } }
+  - tap: { id: chat-send-button }
+  - await: { visible: { text: E2E queued offline message } }
+  - await: { text: { in: { id: queue-status-banner }, contains: "1 message(s) buffered in MMKV" } }
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: control-queue-badge } }
+  - assert: { text: { in: { id: control-queue-badge }, contains: 1 queued } }
+  - tap: { id: category-chip-FOUNDERS }
+  - await: { visible: { id: room-card-room-founders } }
+  - tap: { id: room-card-room-founders }
+  - await: { visible: { id: chat-header-network-toggle } }
+  - tap: { id: chat-header-network-toggle }
+  - await: { hidden: { id: queue-status-banner }, timeout: 10000 }
+  - await: { visible: { text: "When Offline Sim is active" }, timeout: 10000 }
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: spin-roulette-cta } }
+  - assert: { hidden: { id: control-queue-badge } }

@@ -1,0 +1,24 @@
+version: 1
+steps:
+  - echo: Match System Design, switch topic to Founders, spin again, and return
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: spin-roulette-cta }, timeout: 15000 }
+  - tap: { id: spin-roulette-cta }
+  - await: { visible: { id: roulette-start-button } }
+  - tap: { id: roulette-topic-sys }
+  - tap: { id: roulette-start-button }
+  - await: { visible: { id: match-reveal-card }, timeout: 10000 }
+  - assert: { visible: { text: Marcus Vance } }
+  - tap: { id: roulette-topic-founders }
+  - await: { hidden: { id: match-reveal-card } }
+  - assert: { visible: { id: roulette-start-button } }
+  - tap: { id: roulette-start-button }
+  - await: { visible: { id: match-reveal-card }, timeout: 10000 }
+  - assert: { visible: { text: Leila Haddad } }
+  - scroll-to: { target: { id: spin-again-cta }, direction: down }
+  - tap: { id: spin-again-cta }
+  - await: { hidden: { id: match-reveal-card } }
+  - await: { visible: { id: match-reveal-card }, timeout: 10000 }
+  - scroll-to: { target: { id: roulette-back-button }, direction: up }
+  - tap: { id: roulette-back-button }
+  - await: { visible: { id: spin-roulette-cta } }
