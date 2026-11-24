@@ -1,0 +1,14 @@
+version: 1
+steps:
+  - echo: Long-press message bubble to open reaction picker and toggle fire reaction
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: room-card-room-rn-architecture }, timeout: 15000 }
+  - tap: { id: room-card-room-rn-architecture }
+  - await: { visible: { text: Domain has zero outward dependencies } }
+  - long-press: { text: Domain has zero outward dependencies }
+  - await: { visible: { id: chat-reaction-picker } }
+  - tap: { id: "chat-quick-react-🔥" }
+  - await: { hidden: { id: chat-reaction-picker } }
+  - assert: { visible: { id: "chat-reaction-🔥" } }
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: spin-roulette-cta } }

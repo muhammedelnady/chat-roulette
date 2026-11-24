@@ -11,6 +11,8 @@ module.exports = [
     name: "chat-roulette/ignores",
     ignores: [
       "dist/*",
+      "ios/*",
+      "android/*",
       ".expo/*",
       ".expo/cache/*",
       ".expo/dev/*",

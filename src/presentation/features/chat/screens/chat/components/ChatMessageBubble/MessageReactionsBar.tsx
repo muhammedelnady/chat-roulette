@@ -87,6 +87,7 @@ export const MessageReactionsBar = memo<MessageReactionsBarProps>(
 
         {showPicker ? (
           <Animated.View
+            testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.REACTION_PICKER}
             entering={REACTION_CAPSULE_ENTER}
             exiting={REACTION_CAPSULE_EXIT}
             style={[
@@ -101,6 +102,7 @@ export const MessageReactionsBar = memo<MessageReactionsBarProps>(
             {CHAT_CONSTANTS.REACTION_EMOJIS.map((emoji) => (
               <AnimatedPressable
                 key={emoji}
+                testID={CHAT_MESSAGE_BUBBLE_TEST_IDS.QUICK_REACT_OPTION(emoji)}
                 accessibilityRole="button"
                 accessibilityLabel={t("chat.reactionOption", { emoji })}
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}

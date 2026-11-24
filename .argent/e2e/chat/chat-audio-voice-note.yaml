@@ -1,0 +1,16 @@
+version: 1
+steps:
+  - echo: Test audio message bubble speed cycle and play/pause toggle
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: room-card-room-rn-architecture }, timeout: 15000 }
+  - tap: { id: room-card-room-rn-architecture }
+  - await: { visible: { id: audio-message-bubble } }
+  - assert: { text: { in: { id: audio-speed-button }, contains: "Speed 1x" } }
+  - tap: { id: audio-speed-button }
+  - await: { text: { in: { id: audio-speed-button }, contains: "Speed 1.5x" } }
+  - tap: { id: audio-speed-button }
+  - await: { text: { in: { id: audio-speed-button }, contains: "Speed 2x" } }
+  - tap: { id: audio-play-pause-button }
+  - tap: { id: audio-play-pause-button }
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: spin-roulette-cta } }

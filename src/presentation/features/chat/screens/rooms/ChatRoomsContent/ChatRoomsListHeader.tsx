@@ -170,6 +170,7 @@ export const ChatRoomsListHeader = memo<ChatRoomsListHeaderProps>(({ viewModel }
       </Animated.View>
 
       <ScrollView
+        testID={CHAT_ROOMS_TEST_IDS.CATEGORIES_SCROLL}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

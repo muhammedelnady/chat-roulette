@@ -1,0 +1,19 @@
+version: 1
+steps:
+  - echo: Tap quick icebreaker chip and await simulated response
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: chat-rooms-search-input }, timeout: 15000 }
+  - tap: { id: category-chip-TRENDING }
+  - await: { visible: { id: room-card-room-ai-agents } }
+  - tap: { id: room-card-room-ai-agents }
+  - await: { visible: { id: chat-faq-options-bar } }
+  - scroll-to:
+      target: { id: faq-chip-offlineQueue }
+      direction: right
+      within: { id: chat-faq-options-bar }
+  - tap: { id: faq-chip-offlineQueue }
+  - await:
+      visible: { text: When Offline Sim is active }
+      timeout: 10000
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: spin-roulette-cta } }

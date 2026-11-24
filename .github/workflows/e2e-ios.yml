@@ -1,0 +1,82 @@
+name: iOS E2E (Argent)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "src/**"
+      - ".argent/**"
+      - "package.json"
+      - "package-lock.json"
+      - "app.json"
+      - ".github/workflows/e2e-ios.yml"
+
+jobs:
+  e2e-ios:
+    name: Argent iOS Simulator E2E
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild iOS native project
+        env:
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Select and boot iOS Simulator via Argent
+        id: sim
+        run: |
+          SIM_UDID=$(xcrun simctl list devices available -j | node -e '
+            const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const devices = Object.entries(data.devices)
+              .filter(([runtime]) => runtime.includes("iOS"))
+              .sort(([a], [b]) => b.localeCompare(a))
+              .flatMap(([, list]) => list)
+              .filter((d) => d.isAvailable && d.name.includes("iPhone"));
+            const preferred = devices.find((d) => /^iPhone (17|16|15)$/.test(d.name)) || devices[0];
+            if (!preferred) process.exit(1);
+            console.log(preferred.udid);
+          ')
+          echo "udid=$SIM_UDID" >> "$GITHUB_OUTPUT"
+          npx argent run boot-device --udid "$SIM_UDID" --force
+
+      - name: Build Release simulator app
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: |
+          xcodebuild \
+            -workspace ios/ChatRoulette.xcworkspace \
+            -scheme ChatRoulette \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath ios/build
+
+      - name: Install app and run Argent E2E suite
+        run: |
+          xcrun simctl install "${{ steps.sim.outputs.udid }}" ios/build/Build/Products/Release-iphonesimulator/ChatRoulette.app
+          npx argent run stop-all-simulator-servers --devices "${{ steps.sim.outputs.udid }}"
+          npx argent e2e run .argent/e2e --recursive --platform ios --device "${{ steps.sim.outputs.udid }}" --output e2e-artifacts
+
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ios-artifacts
+          path: e2e-artifacts
+          if-no-files-found: ignore

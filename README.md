@@ -23,6 +23,7 @@ npm run verify
 | **Dual-Mode Real-Time Engine**           | `src/data/simulated/SimulatedChatEngine.ts`, `src/data/simulated/SimulatedChatRepositories.ts`, `src/data/repositories/ChatRepositoryImpl.ts`                                           | `src/data/simulated/SimulatedChatEngine.test.ts`, `src/data/mappers/ChatMapper.test.ts`                                                            |
 | **Midnight Pulse UI & Showcase Screens** | `src/presentation/theme/colors.ts`, `src/presentation/features/chat/screens/rooms/`, `src/presentation/features/chat/screens/roulette/`, `src/presentation/features/chat/screens/chat/` | `ChatRoomsContent.test.tsx`, `ChatRouletteContent.test.tsx`, `ChatContent.test.tsx`, `AudioMessageBubble.test.tsx`, `ChatMessageBubble.test.tsx`   |
 | **Bilingual EN / AR RTL Mirroring**      | `src/infrastructure/i18n/translate.ts`, `src/infrastructure/i18n/langs/en.json`, `src/infrastructure/i18n/langs/ar.json`                                                                | `src/infrastructure/i18n/translate.test.ts`, `scripts/validate-i18n.js`                                                                            |
+| **Argent E2E Suite (iOS Simulator)**     | `.argent/e2e/` (`rooms`, `controls`, `roulette`, `chat`, `offline`), `.argent/README.md`, `.github/workflows/e2e-ios.yml`                                                               | `npm run e2e:ios` (12 deterministic YAML tests)                                                                                                    |
 | **Symmetry & Security Gates**            | `scripts/check-symmetry.mjs`, `.gitleaks.toml`, `scripts/secret-scan.sh`                                                                                                                | `npm run check:symmetry`, `npm run secret:scan`, `.github/workflows/ci.yml`                                                                        |
 
 ---
@@ -95,6 +96,9 @@ npm run verify
 
 # 3. Start Expo development server
 npx expo start
+
+# 4. Run Argent iOS Simulator E2E suite (see .argent/README.md for Release build setup)
+npm run e2e:ios
 ```
 
 Optional: copy `.env.example` to `.env` if connecting to a custom Socket.IO / REST endpoint (`EXPO_PUBLIC_CHAT_MODE=socket`).

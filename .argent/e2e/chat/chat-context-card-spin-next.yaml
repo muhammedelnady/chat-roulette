@@ -1,0 +1,13 @@
+version: 1
+steps:
+  - echo: Open Chat Roulette directly from the room context card Spin Next CTA
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: room-card-room-rn-architecture }, timeout: 15000 }
+  - tap: { id: room-card-room-rn-architecture }
+  - await: { visible: { id: chat-room-context-card-cta } }
+  - tap: { id: chat-room-context-card-cta }
+  - await: { visible: { id: roulette-start-button } }
+  - tap: { id: roulette-back-button }
+  - await: { visible: { id: chat-room-context-card-cta } }
+  - tap: { id: chat-header-back-button }
+  - await: { visible: { id: spin-roulette-cta } }

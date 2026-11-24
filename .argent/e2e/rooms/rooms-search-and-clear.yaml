@@ -1,0 +1,30 @@
+version: 1
+steps:
+  - echo: Launch Chat Roulette and test room search and clear
+  - launch: com.muhammedelnady.chatroulette
+  - await: { visible: { id: chat-rooms-search-input }, timeout: 15000 }
+  - assert: { visible: { id: room-card-room-rn-architecture } }
+  - tap: { id: chat-rooms-search-input }
+  - tool: fill
+    delayMs: 500
+    args:
+      text: Founders
+  - tool: keyboard
+    args:
+      key: enter
+  - await: { visible: { id: room-card-room-founders } }
+  - assert: { hidden: { id: room-card-room-rn-architecture } }
+  - tap: { id: chat-rooms-clear-search }
+  - await: { hidden: { id: chat-rooms-clear-search } }
+  - await: { visible: { id: room-card-room-rn-architecture } }
+  - tap: { id: chat-rooms-search-input }
+  - tool: fill
+    delayMs: 500
+    args:
+      text: zzzz-no-match
+  - tool: keyboard
+    args:
+      key: enter
+  - await: { visible: { id: chat-rooms-empty-state } }
+  - tap: { id: chat-rooms-clear-search }
+  - await: { visible: { id: room-card-room-rn-architecture } }

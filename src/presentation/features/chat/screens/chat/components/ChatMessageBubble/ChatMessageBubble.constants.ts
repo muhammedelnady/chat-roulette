@@ -14,5 +14,7 @@ export const CHAT_MESSAGE_BUBBLE_TEST_IDS = {
   LIGHTBOX_MODAL: "chat-message-bubble-lightbox-modal",
   LIGHTBOX_CLOSE: "chat-message-bubble-lightbox-close",
   RETRY_PRESSABLE: "chat-message-bubble-retry",
+  REACTION_PICKER: "chat-reaction-picker",
+  QUICK_REACT_OPTION: (emoji: string) => `chat-quick-react-${emoji}`,
   REACTION_PILL: (emoji: string) => `chat-reaction-${emoji}`,
 } as const;
