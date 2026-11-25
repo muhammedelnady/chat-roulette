@@ -75,18 +75,9 @@ export const ChatTypingIndicator = memo<ChatTypingIndicatorProps>(
       };
     }, [isActive, reducedMotion, dotA, dotB, dotC]);
 
-    const dotAStyle = useAnimatedStyle(
-      () => dotStyleWorklet(dotA.get(), reducedMotion),
-      [reducedMotion]
-    );
-    const dotBStyle = useAnimatedStyle(
-      () => dotStyleWorklet(dotB.get(), reducedMotion),
-      [reducedMotion]
-    );
-    const dotCStyle = useAnimatedStyle(
-      () => dotStyleWorklet(dotC.get(), reducedMotion),
-      [reducedMotion]
-    );
+    const dotAStyle = useAnimatedStyle(() => dotStyleWorklet(dotA.get(), reducedMotion));
+    const dotBStyle = useAnimatedStyle(() => dotStyleWorklet(dotB.get(), reducedMotion));
+    const dotCStyle = useAnimatedStyle(() => dotStyleWorklet(dotC.get(), reducedMotion));
 
     if (!isActive) {
       return null;

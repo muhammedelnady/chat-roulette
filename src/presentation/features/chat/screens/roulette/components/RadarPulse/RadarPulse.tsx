@@ -152,7 +152,7 @@ export const RadarPulse = memo<RadarPulseProps>(
               ? 0.45
               : 0.32,
       };
-    }, [isScanning, isMatched, isActive]);
+    });
 
     const waveBStyle = useAnimatedStyle(() => {
       const value = pulseB.get();
@@ -172,7 +172,7 @@ export const RadarPulse = memo<RadarPulseProps>(
               ? 0.65
               : 0.24,
       };
-    }, [isScanning, isMatched, isActive]);
+    });
 
     const waveCStyle = useAnimatedStyle(() => {
       const value = pulseC.get();
@@ -190,7 +190,7 @@ export const RadarPulse = memo<RadarPulseProps>(
             ? interpolate(value, [0, 1], [0.65, 0.05], Extrapolation.CLAMP)
             : 0,
       };
-    }, [isScanning, isMatched, isActive]);
+    });
 
     const sweepStyle = useAnimatedStyle(() => ({
       transform: [{ rotate: `${sweep.get() * 360}deg` }],

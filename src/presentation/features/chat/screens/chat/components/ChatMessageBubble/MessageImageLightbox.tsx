@@ -89,17 +89,14 @@ export const MessageImageLightbox = memo<MessageImageLightboxProps>(({ imageUrl,
     },
   });
 
-  const backdropStyle = useAnimatedStyle(
-    () => ({
-      opacity: interpolate(
-        Math.abs(translateY.get()),
-        [0, dismissHeight * 0.7],
-        [1, 0],
-        Extrapolation.CLAMP
-      ),
-    }),
-    [dismissHeight]
-  );
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      Math.abs(translateY.get()),
+      [0, dismissHeight * 0.7],
+      [1, 0],
+      Extrapolation.CLAMP
+    ),
+  }));
 
   const imageMotionStyle = useAnimatedStyle(() => {
     const offset = translateY.get();
@@ -121,7 +118,7 @@ export const MessageImageLightbox = memo<MessageImageLightboxProps>(({ imageUrl,
         },
       ],
     };
-  }, [dismissHeight, reducedMotion]);
+  });
 
   if (!imageUrl) {
     return null;
