@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="Chat Roulette — Instant Roulette &amp; Live Rooms">
+  <defs>
+    <clipPath id="card-clip-light">
+      <rect x="8" y="8" width="1184" height="284" rx="18" />
+    </clipPath>
+    <linearGradient id="bg-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F8FAFC" />
+      <stop offset="50%" stop-color="#F1F5F9" />
+      <stop offset="100%" stop-color="#FFFFFF" />
+    </linearGradient>
+    <radialGradient id="aurora-a-light" cx="16%" cy="35%" r="46%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.11" />
+      <stop offset="60%" stop-color="#0284C7" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#F8FAFC" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="aurora-b-light" cx="84%" cy="58%" r="48%">
+      <stop offset="0%" stop-color="#0284C7" stop-opacity="0.11" />
+      <stop offset="60%" stop-color="#7C3AED" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="stroke-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.45" />
+      <stop offset="50%" stop-color="#CBD5E1" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0.45" />
+    </linearGradient>
+    <linearGradient id="title-grad-light" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="45%" stop-color="#1E293B" />
+      <stop offset="78%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+    <linearGradient id="glass-fill-light" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.98" />
+      <stop offset="100%" stop-color="#F8FAFC" stop-opacity="0.95" />
+    </linearGradient>
+    <linearGradient id="glass-border-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65" />
+      <stop offset="50%" stop-color="#CBD5E1" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0.65" />
+    </linearGradient>
+    <linearGradient id="laser-light" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0" />
+      <stop offset="25%" stop-color="#7C3AED" stop-opacity="0.65" />
+      <stop offset="50%" stop-color="#0284C7" stop-opacity="0.9" />
+      <stop offset="75%" stop-color="#7C3AED" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0" />
+    </linearGradient>
+    <pattern id="grid-light" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#7C3AED" stroke-width="0.6" stroke-opacity="0.07" />
+      <circle cx="40" cy="0" r="0.9" fill="#7C3AED" fill-opacity="0.20" />
+    </pattern>
+    <filter id="shadow-light" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0F172A" flood-opacity="0.08" />
+    </filter>
+    <style>
+      @keyframes floatMain { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-4px); } }
+      @keyframes floatAlt { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(3.5px); } }
+      @keyframes spinCW { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes spinCCW { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+      @keyframes flow { 0% { stroke-dashoffset: 800; } 100% { stroke-dashoffset: 0; } }
+      .fl-m { animation: floatMain 5.5s ease-in-out infinite; }
+      .fl-a { animation: floatAlt 4.5s ease-in-out infinite; }
+      .orb-1 { animation: spinCW 24s linear infinite; transform-origin: 122px 150px; }
+      .orb-2 { animation: spinCCW 19s linear infinite; transform-origin: 122px 150px; }
+      .str-1 { stroke-dasharray: 90, 310; animation: flow 6s linear infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .fl-m, .fl-a, .orb-1, .orb-2, .str-1 { animation: none !important; }
+      }
+    </style>
+  </defs>
+
+  <g clip-path="url(#card-clip-light)">
+    <rect x="8" y="8" width="1184" height="284" fill="url(#bg-light)" />
+    <rect x="8" y="8" width="1184" height="284" fill="url(#aurora-a-light)" />
+    <rect x="8" y="8" width="1184" height="284" fill="url(#aurora-b-light)" />
+    <rect x="8" y="8" width="1184" height="284" fill="url(#grid-light)" />
+    <g opacity="0.13" stroke="#0284C7" stroke-width="0.7">
+      <line x1="600" y1="160" x2="130" y2="292" />
+      <line x1="600" y1="160" x2="365" y2="292" />
+      <line x1="600" y1="160" x2="600" y2="292" />
+      <line x1="600" y1="160" x2="835" y2="292" />
+      <line x1="600" y1="160" x2="1070" y2="292" />
+    </g>
+    <g fill="none" stroke-linecap="round">
+      <path d="M 0 60 Q 280 112 560 68 T 1200 54" stroke="#7C3AED" stroke-width="1" opacity="0.12" />
+      <path class="str-1" d="M 0 60 Q 280 112 560 68 T 1200 54" stroke="#7C3AED" stroke-width="1.8" opacity="0.55" />
+      <path d="M 0 238 Q 340 190 660 228 T 1200 202" stroke="#0284C7" stroke-width="1" opacity="0.12" />
+    </g>
+  </g>
+
+  <rect x="8.75" y="8.75" width="1182.5" height="282.5" rx="18" fill="none" stroke="url(#stroke-light)" stroke-width="1.4" />
+  <line x1="280" y1="9.2" x2="920" y2="9.2" stroke="url(#laser-light)" stroke-width="1.5" opacity="0.8" />
+
+  <!-- Left Architecture Core -->
+  <g class="fl-m">
+    <circle cx="122" cy="150" r="42" fill="#7C3AED" opacity="0.07" />
+    <circle cx="122" cy="150" r="64" fill="none" stroke="#0284C7" stroke-width="0.8" opacity="0.25" stroke-dasharray="5 7" />
+    <g>
+      <ellipse class="orb-1" cx="122" cy="150" rx="60" ry="23" fill="none" stroke="#7C3AED" stroke-width="1.7" opacity="0.85" stroke-dasharray="90 14 30 12" />
+    </g>
+    <g transform="rotate(60 122 150)">
+      <ellipse class="orb-2" cx="122" cy="150" rx="60" ry="23" fill="none" stroke="#0284C7" stroke-width="1.5" opacity="0.72" stroke-dasharray="70 16 24 12" />
+    </g>
+    <g transform="rotate(120 122 150)">
+      <ellipse class="orb-1" cx="122" cy="150" rx="60" ry="23" fill="none" stroke="#7C3AED" stroke-width="1.4" opacity="0.65" stroke-dasharray="80 16" />
+    </g>
+    <circle cx="122" cy="150" r="8.5" fill="#7C3AED" />
+    <circle cx="122" cy="150" r="3.8" fill="#FFFFFF" />
+
+    <g class="fl-a" filter="url(#shadow-light)">
+      <rect x="42" y="34" width="109" height="24" rx="7" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1" />
+      <circle cx="55" cy="46" r="3" fill="#7C3AED" />
+      <text x="65" y="49.5" font-family="'SF Mono', 'Fira Code', Menlo, monospace" font-size="9.5" font-weight="700" fill="#1E293B">DUAL ENGINE</text>
+    </g>
+    <g class="fl-a" filter="url(#shadow-light)">
+      <rect x="42" y="242" width="109" height="24" rx="7" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1" />
+      <circle cx="55" cy="254" r="3" fill="#0284C7" />
+      <text x="65" y="257.5" font-family="'SF Mono', 'Fira Code', Menlo, monospace" font-size="9.5" font-weight="700" fill="#1E293B">FIFO OUTBOX</text>
+    </g>
+  </g>
+
+  <!-- Right Device HUD -->
+  <g class="fl-m">
+    <rect x="1024" y="44" width="100" height="190" rx="17" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.5" filter="url(#shadow-light)" />
+    <rect x="1029" y="49" width="90" height="180" rx="13" fill="#F1F5F9" opacity="0.92" />
+    <rect x="1057" y="55" width="34" height="6" rx="3" fill="#0F172A" />
+    <circle cx="1085" cy="58" r="1.5" fill="#7C3AED" />
+
+    <rect x="1037" y="70" width="42" height="4.5" rx="2.2" fill="#7C3AED" opacity="0.9" />
+    <rect x="1037" y="78" width="28" height="3" rx="1.5" fill="#475569" opacity="0.7" />
+    <circle cx="1104" cy="74" r="5" fill="#0284C7" fill-opacity="0.28" stroke="#7C3AED" stroke-width="1" />
+
+    <rect x="1036" y="90" width="76" height="50" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+    <circle cx="1045" cy="100" r="2" fill="#EF4444" />
+    <circle cx="1052" cy="100" r="2" fill="#F59E0B" />
+    <circle cx="1059" cy="100" r="2" fill="#10B981" />
+    <rect x="1044" y="110" width="52" height="3.6" rx="1.8" fill="#7C3AED" opacity="0.9" />
+    <rect x="1044" y="119" width="44" height="3.6" rx="1.8" fill="#0284C7" opacity="0.78" />
+    <rect x="1044" y="128" width="36" height="3.6" rx="1.8" fill="#475569" opacity="0.65" />
+
+    <rect x="1036" y="147" width="76" height="38" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+    <polyline points="1042,175 1054,167 1066,171 1079,158 1092,162 1105,153" fill="none" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="1105" cy="153" r="2.6" fill="#7C3AED" />
+
+    <rect x="1038" y="194" width="72" height="14" rx="5" fill="#7C3AED" fill-opacity="0.22" stroke="#7C3AED" stroke-width="0.9" />
+    <rect x="1058" y="199.8" width="32" height="2.6" rx="1.3" fill="#0F172A" opacity="0.85" />
+    <rect x="1057" y="218" width="34" height="2.8" rx="1.4" fill="#475569" opacity="0.6" />
+
+    <g class="fl-a" filter="url(#shadow-light)">
+      <rect x="963" y="68" width="85" height="23" rx="7" fill="url(#glass-fill-light)" stroke="#7C3AED" stroke-width="1.1" />
+      <circle cx="975" cy="79.5" r="2.8" fill="#7C3AED" />
+      <text x="984" y="83" font-family="'SF Mono', 'Fira Code', Menlo, monospace" font-size="9.2" font-weight="700" fill="#0F172A">60/120Hz</text>
+    </g>
+    <g class="fl-a" filter="url(#shadow-light)">
+      <rect x="1051" y="238" width="107" height="23" rx="7" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.1" />
+      <circle cx="1063" cy="249.5" r="2.8" fill="#0284C7" />
+      <text x="1072" y="253" font-family="'SF Mono', 'Fira Code', Menlo, monospace" font-size="9.2" font-weight="700" fill="#7C3AED">EN · AR RTL</text>
+    </g>
+  </g>
+
+  <!-- Centerpiece Hero -->
+  <g text-anchor="middle" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <g transform="translate(600, 46)" filter="url(#shadow-light)">
+      <rect x="-180.0" y="-14" width="360" height="28" rx="14" fill="#FFFFFF" fill-opacity="0.94" stroke="url(#glass-border-light)" stroke-width="1.15" />
+      <circle cx="-158.0" cy="0" r="4" fill="#7C3AED">
+        <animate attributeName="r" values="4;11" dur="2.2s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.85;0" dur="2.2s" repeatCount="indefinite" />
+      </circle>
+      <circle cx="-158.0" cy="0" r="4" fill="#7C3AED" />
+      <text x="8" y="3.8" font-size="10.2" font-weight="700" fill="#1E293B" letter-spacing="1.6">MIDNIGHT PULSE <tspan fill="#7C3AED">·</tspan> REAL-TIME ENGINE</text>
+    </g>
+
+    <text x="600" y="120" font-size="48" font-weight="800" fill="url(#title-grad-light)" letter-spacing="-0.7">Chat Roulette</text>
+
+    <text x="600" y="155" font-size="15.5" font-weight="500" fill="#475569" letter-spacing="0.3">
+      Instant Roulette &amp; Live Rooms <tspan fill="#7C3AED" font-weight="700">·</tspan>
+      <tspan fill="#1E293B">Offline MMKV Outbox</tspan>
+      <tspan fill="#7C3AED" font-weight="700">·</tspan>
+      <tspan fill="#1E293B">Voice Notes &amp; Reactions</tspan>
+    </text>
+
+    <line x1="420" y1="178" x2="780" y2="178" stroke="url(#laser-light)" stroke-width="1" opacity="0.6" />
+    <circle cx="600" cy="178" r="2.3" fill="#7C3AED" />
+
+    <g transform="translate(600, 198)" filter="url(#shadow-light)">
+      <g transform="translate(-303.5, 0)">
+        <rect x="0" y="0" width="117" height="32" rx="9" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.15" />
+        <circle cx="15" cy="16" r="3.3" fill="#A855F7" />
+        <text x="64.5" y="20.2" font-size="11.5" font-weight="700" fill="#0F172A">Expo SDK 58</text>
+      </g>
+      <g transform="translate(-176.5, 0)">
+        <rect x="0" y="0" width="98" height="32" rx="9" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.15" />
+        <circle cx="15" cy="16" r="3.3" fill="#38BDF8" />
+        <text x="55.0" y="20.2" font-size="11.5" font-weight="700" fill="#0F172A">React 19</text>
+      </g>
+      <g transform="translate(-68.5, 0)">
+        <rect x="0" y="0" width="117" height="32" rx="9" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.15" />
+        <circle cx="15" cy="16" r="3.3" fill="#10B981" />
+        <text x="64.5" y="20.2" font-size="11.5" font-weight="700" fill="#0F172A">MMKV Outbox</text>
+      </g>
+      <g transform="translate(58.5, 0)">
+        <rect x="0" y="0" width="125" height="32" rx="9" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.15" />
+        <circle cx="15" cy="16" r="3.3" fill="#F59E0B" />
+        <text x="68.5" y="20.2" font-size="11.5" font-weight="700" fill="#0F172A">Reanimated 4</text>
+      </g>
+      <g transform="translate(193.5, 0)">
+        <rect x="0" y="0" width="110" height="32" rx="9" fill="url(#glass-fill-light)" stroke="url(#glass-border-light)" stroke-width="1.15" />
+        <circle cx="15" cy="16" r="3.3" fill="#EC4899" />
+        <text x="61.0" y="20.2" font-size="11.5" font-weight="700" fill="#0F172A">Clean Arch</text>
+      </g>
+    </g>
+  </g>
+</svg>

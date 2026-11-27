@@ -1,13 +1,51 @@
-# Chat Roulette — Real-Time Chat Rooms & Instant Roulette Showcase
+<div align="center">
 
-**A production-grade Expo SDK 58 (React Native 0.88, React 19, New Architecture) real-time messaging & roulette matching showcase built with Strict TypeScript 6, Clean Architecture, MMKV offline outbound queueing, Reanimated 4 motion, and 100% EN/AR RTL parity.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/banner-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="./assets/banner-light.svg" />
+  <img width="100%" src="./assets/banner-dark.svg" alt="Chat Roulette — Midnight Pulse Real-Time Rooms &amp; Instant Roulette Showcase" />
+</picture>
 
-[![CI](https://github.com/muhammedelnady/chat-roulette/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammedelnady/chat-roulette/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-7C3AED.svg)](LICENSE)
+<p align="center">
+  <b>Production-grade Expo SDK 58 (React Native 0.88, React 19, New Architecture) real-time messaging &amp; topic-matched roulette showcase built with Strict TypeScript 6, Clean Architecture, AES-256 MMKV offline outbound queueing, Reanimated 4 motion, and 100% EN/AR RTL parity.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/muhammedelnady/chat-roulette/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/muhammedelnady/chat-roulette/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20GATE&labelColor=0D1117" alt="CI Status" /></a>&nbsp;
+  <img src="https://img.shields.io/badge/EXPO_SDK-58-A855F7?style=for-the-badge&logo=expo&logoColor=white&labelColor=0D1117" alt="Expo SDK 58" />&nbsp;
+  <img src="https://img.shields.io/badge/REACT_NATIVE-0.88_%2B_REACT_19-38BDF8?style=for-the-badge&logo=react&logoColor=white&labelColor=0D1117" alt="React Native 0.88" />&nbsp;
+  <img src="https://img.shields.io/badge/OUTBOX-MMKV_AES--256-10B981?style=for-the-badge&labelColor=0D1117" alt="MMKV Outbox" />&nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-F59E0B?style=for-the-badge&labelColor=0D1117" alt="MIT License" /></a>
+</p>
+
+</div>
 
 ---
 
-## 1. Reviewer's Guide (5-Minute Tour)
+## 1. Visual Showcase — Midnight Pulse UI, Roulette Radar & Arabic RTL
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th width="25%" align="center">Pulse Rooms Hub</th>
+      <th width="25%" align="center">Voice Notes &amp; Reactions</th>
+      <th width="25%" align="center">Roulette Radar Match</th>
+      <th width="25%" align="center">Live Arabic RTL Mirroring</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center"><img src="assets/screenshots/rooms-dark.png" alt="Pulse Rooms Dark Theme" width="100%" /></td>
+      <td align="center"><img src="assets/screenshots/chat-room.png" alt="Interactive Chat Room with Audio Waveform" width="100%" /></td>
+      <td align="center"><img src="assets/screenshots/roulette-radar.png" alt="Topic-Filtered Roulette Radar Match" width="100%" /></td>
+      <td align="center"><img src="assets/screenshots/rooms-arabic-rtl.png" alt="Arabic RTL Pulse Rooms" width="100%" /></td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## 2. Reviewer's Guide (5-Minute Tour)
 
 Run every engineering gate (`prettier`, `tsc --noEmit`, ESLint Clean Architecture layer boundaries, EN/AR i18n parity, DI & Result checks, Symmetry rules, and Jest coverage suite) with one command:
 
@@ -28,7 +66,7 @@ npm run verify
 
 ---
 
-## 2. Overview & Showcase Highlights
+## 3. Overview & Showcase Highlights
 
 ### Built for Instant Demoing (Zero Backend Required)
 
@@ -50,7 +88,7 @@ Recruiters and engineering reviewers can boot the app immediately with `npx expo
 
 ---
 
-## 3. Clean Architecture & Data Flow
+## 4. Clean Architecture & Data Flow
 
 ```mermaid
 flowchart LR
@@ -76,7 +114,7 @@ stateDiagram-v2
 
 ---
 
-## 4. Security & Privacy Posture
+## 5. Security & Privacy Posture
 
 - **Zero Secrets Committed:** `.env` files, native keystores, Firebase plists, and build artifacts are strictly gitignored.
 - **Automated Secret Scanning:** `.gitleaks.toml` and `.github/workflows/ci.yml` enforce zero credential leaks across both working directory and full git history (`bash scripts/secret-scan.sh`).
@@ -85,16 +123,18 @@ stateDiagram-v2
 
 ---
 
-## 5. Getting Started
+## 6. Getting Started
 
 ```bash
-# 1. Install dependencies
+# 1. Clone & install dependencies
+git clone https://github.com/muhammedelnady/chat-roulette.git
+cd chat-roulette
 npm install
 
 # 2. Run the full verification & test suite
 npm run verify
 
-# 3. Start Expo development server
+# 3. Start Expo development server (Simulated Real-Time Mode by default)
 npx expo start
 
 # 4. Run Argent iOS Simulator E2E suite (see .argent/README.md for Release build setup)
@@ -102,3 +142,9 @@ npm run e2e:ios
 ```
 
 Optional: copy `.env.example` to `.env` if connecting to a custom Socket.IO / REST endpoint (`EXPO_PUBLIC_CHAT_MODE=socket`).
+
+---
+
+## 7. License
+
+Distributed under the [MIT License](LICENSE). Copyright (c) 2026 Mohamed Elnady.
